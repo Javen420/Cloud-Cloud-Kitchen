@@ -39,3 +39,40 @@ Import these in your microservice to use them.
 
   # Delete
   r.delete("driver:123:location")
+
+--AMQP --
+copy and paste this into main.py of any service that is
+directly sending amqp requests to notifications service
+
+if your service is also connecting to the db or redis,
+just add it within the lifespan function
+
+```
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from shared.config import Settings
+from shared.amqp import AMQPPublisher
+
+settings = Settings()
+publisher = AMQPPublisher()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await publisher.connect(settings.rabbitmq_url)
+    app.state.publisher = publisher
+    yield
+    await publisher.close()
+
+app = FastAPI(lifespan=lifespan)
+```
+
+Within your routes file (file with exposed apis) add this
+gotta change to what your service is btw
+```
+await publisher.publish("order.assigned", {
+    "order_id": order_id,
+    "kitchen_id": kitchen_id,
+    "customer_id": customer_id,
+    "estimated_minutes": eta_minutes,
+})
+```

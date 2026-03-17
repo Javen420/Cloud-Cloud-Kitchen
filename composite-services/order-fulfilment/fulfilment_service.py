@@ -5,7 +5,7 @@ import httpx
 
 PENDING_ORDERS_URL  = os.getenv("PENDING_ORDERS_URL", "http://pending-orders:8085")
 NEW_ORDERS_URL      = os.getenv("NEW_ORDERS_URL", "http://new-orders:8082")
-PAYMENT_URL         = os.getenv("PAYMENT_URL", "http://payment-service:8089")
+PAYMENT_URL         = os.getenv("PAYMENT_URL", "http://payment:8089")
 RABBITMQ_URL        = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 
 
@@ -134,4 +134,25 @@ def submit_order(
         "order_id"  : order_id,
         "status"    : "confirmed",
         "message"   : "Order placed successfully!",
+    }, 200
+
+
+def get_order_status(order_id: str) -> tuple[dict, int]:
+    with httpx.Client() as client:
+        resp = client.get(f"{PENDING_ORDERS_URL}/orders/{order_id}")
+
+    if resp.status_code == 404:
+        return {"error": "Order not found.", "status": "not_found"}, 404
+
+    if resp.status_code != 200:
+        return {"error": "Failed to fetch order.", "status": "error"}, 502
+
+    data = resp.json()
+    # pending-orders returns a flat object; normalize to what frontend expects
+    return {
+        "order_id": data.get("order_id") or order_id,
+        "status": data.get("status"),
+        "delivery_address": data.get("delivery_address"),
+        "total_amount": data.get("total_amount"),
+        "items": data.get("items", []),
     }, 200

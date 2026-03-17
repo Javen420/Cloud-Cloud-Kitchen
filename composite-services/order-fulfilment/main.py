@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 
 from schemas import SubmitOrderRequest, SubmitOrderResponse
-from fulfilment_service import submit_order
+from fulfilment_service import submit_order, get_order_status
 
 app = FastAPI(title="Order Fulfilment Service", version="1.0.0")
 
@@ -20,6 +20,12 @@ def submit(payload: SubmitOrderRequest):
         stripe_customer_id  =payload.stripe_customer_id,
         idempotency_key     =payload.idempotency_key,
     )
+    return JSONResponse(content=response, status_code=status_code)
+
+
+@app.get("/api/v1/order/{order_id}")
+def get_order(order_id: str):
+    response, status_code = get_order_status(order_id=order_id)
     return JSONResponse(content=response, status_code=status_code)
 
 

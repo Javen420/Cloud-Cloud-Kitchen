@@ -7,8 +7,8 @@ from fastapi import FastAPI, Depends, Request, HTTPException, Header
 from fastapi.responses import JSONResponse
 from supabase import Client
 
-ROOT_DIR = Path(__file__).resolve().parents[2]
-load_dotenv(ROOT_DIR / ".env")
+ROOT_DIR = Path(__file__).resolve().parent
+load_dotenv()  # loads from current dir, or just remove this line entirely
 if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 

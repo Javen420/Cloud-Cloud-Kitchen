@@ -14,3 +14,4 @@ class PaymentResponse(BaseModel):
     charge_id: str | None = None
     status: str
     error: str | None = None
+

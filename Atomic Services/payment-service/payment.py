@@ -1,9 +1,10 @@
 import os
 import stripe
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from supabase import Client
 
 stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
+LOCK_TIMEOUT_SECONDS = int(os.getenv("PAYMENT_LOCK_TIMEOUT_SECONDS", "120"))
 
 RECOVERY_STARTED        = "started"
 RECOVERY_ORDER_CREATED  = "order_created"
@@ -20,6 +21,26 @@ async def process_payment(
     idempotency_key_str: str,
 ) -> tuple[dict, int]:
 
+    if not stripe.api_key:
+        return {"status": "error", "error": "STRIPE_SECRET_KEY is not set"}, 500
+
+    def _parse_locked_at(value) -> datetime | None:
+        if not value:
+            return None
+        if isinstance(value, datetime):
+            return value
+        # Supabase typically returns ISO strings, sometimes ending with 'Z'
+        if isinstance(value, str):
+            s = value.replace("Z", "+00:00")
+            try:
+                dt = datetime.fromisoformat(s)
+            except ValueError:
+                return None
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        return None
+
     # ── Phase 1: Upsert & check idempotency key ──────────────────────────────
     existing = db.table("idempotency_keys").select("*").eq("key", idempotency_key_str).execute()
 
@@ -30,7 +51,9 @@ async def process_payment(
             return key["response_body"], key["response_code"]
 
         if key["locked_at"] is not None:
-            return {"error": "Request already in progress. Retry shortly."}, 409
+            locked_at = _parse_locked_at(key["locked_at"])
+            if locked_at and (datetime.now(timezone.utc) - locked_at) < timedelta(seconds=LOCK_TIMEOUT_SECONDS):
+                return {"status": "error", "error": "Request already in progress. Retry shortly."}, 409
 
         # Unlock and continue from recovery point
         db.table("idempotency_keys").update({

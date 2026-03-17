@@ -6,6 +6,10 @@ import stripe
 from fastapi import FastAPI, Depends, Request, HTTPException, Header
 from fastapi.responses import JSONResponse
 from supabase import Client
+from dotenv import load_dotenv
+
+# Load env vars from local .env if present (dev convenience)
+load_dotenv()
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 SHARED_DIR = ROOT_DIR / "shared"
@@ -32,15 +36,21 @@ async def pay(
     payload: PaymentRequest,
     db: Client = Depends(get_db),
 ):
-    response, status_code = await process_payment(
-        db=db,
-        user_id=payload.user_id,
-        amount=payload.amount,
-        currency=payload.currency,
-        stripe_customer_id=payload.stripe_customer_id,
-        idempotency_key_str=payload.idempotency_key,
-    )
-    return JSONResponse(content=response, status_code=status_code)
+    try:
+        response, status_code = await process_payment(
+            db=db,
+            user_id=payload.user_id,
+            amount=payload.amount,
+            currency=payload.currency,
+            stripe_customer_id=payload.stripe_customer_id,
+            idempotency_key_str=payload.idempotency_key,
+        )
+        return JSONResponse(content=response, status_code=status_code)
+    except Exception as e:
+        return JSONResponse(
+            content={"status": "error", "error": str(e), "order_id": None, "charge_id": None},
+            status_code=500,
+        )
 
 
 @app.post("/api/v1/payment/webhook")

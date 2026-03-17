@@ -4,6 +4,9 @@ services:
   redis:
     image: redis:7-alpine
     env_file: ../.env
+    environment:
+      # Do not set a password unless redis-server is configured with one
+      REDIS_PASSWORD: ""
     ports:
       - "6379:6379"
     healthcheck:
@@ -61,6 +64,11 @@ services:
       context: ..
       dockerfile: atomic-services/pending-orders/Dockerfile
     env_file: ../.env
+    environment:
+      # Inside Docker, services must use the redis container hostname (not localhost)
+      REDIS_ADDR: redis:6379
+      # Keep empty unless redis is configured with requirepass
+      REDIS_PASSWORD: ""
     ports:
       - "8085:8085"
     depends_on:
@@ -85,6 +93,10 @@ services:
       context: ..
       dockerfile: composite-services/order-fulfilment/Dockerfile
     env_file: ../.env
+    environment:
+      PENDING_ORDERS_URL: http://pending-orders:8085
+      NEW_ORDERS_URL: http://new-orders:8082
+      PAYMENT_URL: http://payment:8089
     ports:
       - "8081:8081"
     depends_on:

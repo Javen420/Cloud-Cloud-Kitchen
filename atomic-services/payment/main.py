@@ -117,11 +117,13 @@ async def stripe_webhook(
     event_type = event["type"]
     data_object = event["data"]["object"]
 
-    if event_type == "checkout.session.completed":
+    if event_type in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
         # Mark payment as paid and trigger order confirmation + notification
         db = get_supabase()
         handle_checkout_session_completed(db, data_object)
-        print(f"Checkout session completed: {data_object.get('id')}")
+        print(f"Checkout session paid: {data_object.get('id')}")
+    elif event_type == "checkout.session.async_payment_failed":
+        print(f"Checkout session async payment failed: {data_object.get('id')}")
     elif event_type == "payment_intent.succeeded":
         print(f"PaymentIntent succeeded: {data_object['id']}")
     elif event_type == "payment_intent.payment_failed":

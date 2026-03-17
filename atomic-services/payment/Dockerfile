@@ -14,4 +14,4 @@ COPY atomic-services/payment/ .
 
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8088"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8089"]

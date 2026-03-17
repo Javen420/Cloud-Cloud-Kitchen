@@ -236,6 +236,8 @@ def create_checkout_session(
     try:
         session = stripe.checkout.Session.create(
             mode="payment",
+            # Explicitly allow card + PayNow (avoids Link showing up)
+            payment_method_types=["card", "paynow"],
             line_items=line_items,
             success_url=success_url,
             cancel_url=cancel_url,

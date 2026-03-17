@@ -1,8 +1,51 @@
 ── Shared Utilities ─────────────────────────────────────
+config.py   — Pydantic Settings (loads .env automatically)
 database.py — Supabase connection helper
 redis.py    — Redis connection helper
 
 Import these in your microservice to use them.
+
+── Config / Settings (config.py) ───────────────────────
+config.py uses Pydantic BaseSettings to load environment
+variables into a typed Python object. It reads from your
+.env file automatically.
+
+  from shared.config import Settings
+  settings = Settings()
+
+Now you can access any env variable as an attribute:
+
+  settings.supabase_url       # from SUPABASE_URL in .env
+  settings.redis_addr         # defaults to "localhost:6379"
+  settings.rabbitmq_url       # defaults to "amqp://guest:guest@localhost:5672/"
+  settings.port               # defaults to 8080
+
+All available fields and their defaults:
+
+  supabase_url          ""
+  supabase_key          ""
+  supabase_jwt_secret   ""
+  redis_addr            "localhost:6379"
+  redis_password        ""
+  rabbitmq_url          "amqp://guest:guest@localhost:5672/"
+  google_routes_api_key ""
+  stripe_secret_key     ""
+  outsystems_menu_url   ""
+  order_fulfilment_url  "http://localhost:8081"
+  assign_kitchen_url    "http://localhost:8083"
+  order_fulfilment_coord_url "http://localhost:8084"
+  assign_driver_url     "http://localhost:8086"
+  eta_tracking_url      "http://localhost:8087"
+  notification_url      "http://localhost:8090"
+  port                  8080
+
+To set these, add them to your .env file in UPPER_CASE:
+
+  SUPABASE_URL=https://your-project.supabase.co
+  SUPABASE_KEY=your-key
+  RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+
+Any env vars not listed above are silently ignored (extra = "ignore").
 
 ── Importing (only add what your service needs) ─────────
 

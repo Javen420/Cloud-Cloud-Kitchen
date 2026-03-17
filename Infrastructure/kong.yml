@@ -18,6 +18,10 @@ services:
       paths:
         - /api/v1/order/submit
       methods: ["POST"]
+    - name: order-fulfilment-tracking-routes
+      paths:
+        - /api/v1/order
+      methods: ["GET"]
 
 
   # Scenario 2
@@ -67,7 +71,7 @@ services:
 
   # Notification
 - name: notification-service
-  url: http://host.docker.internal:8090
+  url: http://notifications:8090
   routes:
     - name: notification-route
       paths:

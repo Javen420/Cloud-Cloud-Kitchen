@@ -1,4 +1,6 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+// const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";  
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://personal-dkkhoptv.outsystemscloud.com/MenuService/rest/MenuService/Menu";  
+
 
 function normalizeMenuItem(raw) {
   // OutSystems commonly returns PascalCase keys like Id/Name/price.
@@ -9,6 +11,7 @@ function normalizeMenuItem(raw) {
   const imageUrl = raw?.ImgUrl ?? raw?.imgUrl ?? raw?.imageUrl ?? raw?.ImageUrl ?? null;
   const calories = raw?.Calories ?? raw?.calories ?? null;
   const typeId = raw?.TypeId ?? raw?.typeId ?? null;
+  console.log(BASE_URL)
 
   const category =
     raw?.category ??
@@ -27,7 +30,7 @@ function normalizeMenuItem(raw) {
 }
 
 export async function getMenu() {
-  const res = await fetch(`${BASE_URL}/api/v1/menu`);
+  const res = await fetch(`${BASE_URL}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || err.error || "Failed to load menu");

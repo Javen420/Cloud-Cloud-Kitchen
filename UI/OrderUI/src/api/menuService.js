@@ -1,6 +1,7 @@
-// const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";  
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || "https://personal-dkkhoptv.outsystemscloud.com/MenuService/rest/MenuService/Menu";  
-
+// Injected from repo root `.env` `OUTSYSTEMS_MENU_URL` via vite.config.js; fallback for local dev.
+const BASE_URL =
+  import.meta.env.OUTSYSTEMS_MENU_URL ||
+  "https://personal-dkkhoptv.outsystemscloud.com/MenuService/rest/MenuService/Menu";
 
 function normalizeMenuItem(raw) {
   // OutSystems commonly returns PascalCase keys like Id/Name/price.
@@ -11,7 +12,6 @@ function normalizeMenuItem(raw) {
   const imageUrl = raw?.ImgUrl ?? raw?.imgUrl ?? raw?.imageUrl ?? raw?.ImageUrl ?? null;
   const calories = raw?.Calories ?? raw?.calories ?? null;
   const typeId = raw?.TypeId ?? raw?.typeId ?? null;
-  console.log(BASE_URL)
 
   const category =
     raw?.category ??

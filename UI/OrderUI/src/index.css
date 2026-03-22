@@ -9,34 +9,36 @@
    ========================= */
 
 :root {
-  /* CLEAN LIGHT / FOOD DELIVERY THEME */
-  --background: 210 20% 98%;        /* Near-white with cool tint */
-  --foreground: 220 25% 10%;        /* Deep near-black text */
+  /* Light customer theme — navy blue brand (not black) */
+  --background: 214 32% 97%;
+  --foreground: 222 47% 14%;
 
-  --card: 0 0% 100%;                /* Pure white cards */
-  --card-foreground: 220 25% 10%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 47% 14%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 220 25% 10%;
+  --popover-foreground: 222 47% 14%;
 
-  --primary: 220 13% 9%;            /* Black — primary CTA buttons */
-  --primary-foreground: 0 0% 100%;  /* White text on black */
+  /* Deep navy — buttons, badges, key UI */
+  --primary: 222 47% 22%;
+  --primary-foreground: 210 40% 98%;
 
-  --secondary: 214 32% 91%;         /* Light blue-gray (category chips, selected states) */
-  --secondary-foreground: 220 25% 10%;
+  --secondary: 214 32% 92%;
+  --secondary-foreground: 222 47% 18%;
 
-  --muted: 210 16% 93%;             /* Very light gray (input backgrounds, dividers) */
-  --muted-foreground: 215 16% 47%;  /* Medium gray — subtitles, helper text */
+  --muted: 214 24% 93%;
+  --muted-foreground: 215 16% 42%;
 
-  --accent: 213 94% 58%;            /* Blue — active tab underline, selected tip button */
+  /* Brighter steel blue — highlights, icons, links */
+  --accent: 217 91% 48%;
   --accent-foreground: 0 0% 100%;
 
-  --destructive: 0 84% 60%;
+  --destructive: 0 84% 58%;
   --destructive-foreground: 0 0% 100%;
 
-  --border: 214 20% 88%;            /* Subtle gray border */
-  --input: 210 16% 95%;             /* Light input fill */
-  --ring: 213 94% 58%;              /* Blue focus ring */
+  --border: 214 24% 88%;
+  --input: 214 28% 94%;
+  --ring: 222 55% 38%;
 
   --radius: 1rem;
 }
@@ -112,9 +114,18 @@
 /* Glass utilities */
 @layer utilities {
   .glass {
-    @apply bg-white/70 backdrop-blur-xl border border-black/5;
+    @apply bg-white/75 backdrop-blur-xl border border-[hsl(222_47%_22%/0.08)];
   }
   .glass-card {
-    @apply bg-white/80 backdrop-blur-md border border-black/5 shadow-sm;
+    @apply bg-white/85 backdrop-blur-md border border-[hsl(222_47%_22%/0.06)] shadow-sm;
   }
+
+  /* Customer app — soft navy wash */
+  .page-customer {
+    @apply min-h-screen bg-background;
+    background-image:
+      radial-gradient(ellipse 120% 80% at 100% -15%, hsl(222 47% 22% / 0.07), transparent 52%),
+      radial-gradient(ellipse 90% 60% at -5% 40%, hsl(217 91% 48% / 0.06), transparent 48%);
+  }
+
 }

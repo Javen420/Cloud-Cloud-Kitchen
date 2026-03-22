@@ -10,6 +10,7 @@ export default function CustomerCheckout() {
   const [, setLocation] = useLocation();
   const cartItems = useCartStore((state) => state.items);
   const cartTotal = useCartStore((state) => state.getTotal());
+  const clearCart = useCartStore((state) => state.clearCart);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -42,6 +43,12 @@ export default function CustomerCheckout() {
         })),
         dropoff_address: formData.address,
         idempotency_key: crypto.randomUUID(),
+        payment: {
+          card_number: formData.cardNumber.replace(/\s/g, ""),
+          card_expiry: formData.cardExpiry.replace(/\s/g, ""),
+          card_cvc: formData.cardCvc,
+          card_name: formData.cardName,
+        },
       });
 
       if (data.status === "confirmed" && data.order_id) {

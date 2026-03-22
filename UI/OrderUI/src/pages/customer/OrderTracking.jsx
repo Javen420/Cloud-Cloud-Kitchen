@@ -58,8 +58,8 @@ export default function OrderTracking() {
             ...(prev || {}),
             order_id: data.order_id || orderId,
             status: data.status || prev?.status,
-            delivery_address: data.delivery_address || prev?.delivery_address,
-            total_amount: data.total_amount ? Number(data.total_amount) : prev?.total_amount,
+            dropoff_address: data.dropoff_address || data.delivery_address || prev?.dropoff_address,
+            total_cents: data.total_cents ? Number(data.total_cents) : prev?.total_cents,
           }));
         });
       } catch {

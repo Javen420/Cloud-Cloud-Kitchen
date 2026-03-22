@@ -39,6 +39,7 @@ export default function OrderTracking() {
     };
 
     fetchOrder();
+    // Poll every 10 seconds for status updates
     interval = setInterval(fetchOrder, 10000);
     return () => clearInterval(interval);
   }, [orderId]);

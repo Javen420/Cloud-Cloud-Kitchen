@@ -7,6 +7,14 @@ import { getOrderStatus } from "@/api/orderService";
 import { getFcmRegistrationToken, onForegroundMessage } from "@/lib/firebase";
 import { subscribeToOrderTopic } from "@/api/notificationService";
 
+function formatDbTimestamp(iso) {
+  if (iso == null || iso === "") return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  // DB stores UTC; browser shows local timezone
+  return d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
 const STATUS_STEPS = [
   { key: "confirmed", label: "Order confirmed", icon: CheckCircle2 },
   { key: "preparing", label: "Being prepared", icon: ChefHat },
@@ -54,12 +62,19 @@ export default function OrderTracking() {
         unsubscribe = await onForegroundMessage((payload) => {
           const data = payload?.data || {};
           if (data.order_id && data.order_id !== orderId) return;
+          const cents =
+            data.total_cents != null
+              ? Number(data.total_cents)
+              : data.total_amount != null
+                ? Number(data.total_amount)
+                : undefined;
           setOrder((prev) => ({
             ...(prev || {}),
             order_id: data.order_id || orderId,
             status: data.status || prev?.status,
-            dropoff_address: data.dropoff_address || data.delivery_address || prev?.dropoff_address,
-            total_cents: data.total_cents ? Number(data.total_cents) : prev?.total_cents,
+            dropoff_address:
+              data.dropoff_address || data.delivery_address || prev?.dropoff_address,
+            total_cents: cents !== undefined && !Number.isNaN(cents) ? cents : prev?.total_cents,
           }));
         });
       } catch {
@@ -73,6 +88,9 @@ export default function OrderTracking() {
 
   const rawStep = order ? STATUS_STEPS.findIndex((s) => s.key === order.status) : -1;
   const currentStepIndex = rawStep < 0 ? -1 : rawStep;
+
+  const placedAt =
+    order && !loading ? formatDbTimestamp(order.created_at) : null;
 
   return (
     <div className="page-customer pb-24">
@@ -94,6 +112,9 @@ export default function OrderTracking() {
                 {orderId}
               </span>
             </p>
+            {placedAt && (
+              <p className="text-xs text-muted-foreground mt-2">Placed {placedAt}</p>
+            )}
           </div>
 
           {loading && (
@@ -168,7 +189,12 @@ export default function OrderTracking() {
                   </div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Total Paid</span>
-                    <span className="text-primary font-bold">${(order.total_cents / 100)?.toFixed(2)}</span>
+                    <span className="text-primary font-bold">
+                      $
+                      {(
+                        Number(order.total_cents ?? order.total_amount ?? 0) / 100
+                      ).toFixed(2)}
+                    </span>
                   </div>
                 </div>
               </div>

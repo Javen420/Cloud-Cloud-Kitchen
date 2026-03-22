@@ -7,6 +7,8 @@ import httpx
 PAYMENT_URL    = os.getenv("PAYMENT_URL", "http://payment:8089")
 NEW_ORDERS_URL = os.getenv("NEW_ORDERS_URL", "http://new-orders:8082")
 RABBITMQ_URL   = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
+# Must match checkout UI delivery line (default $4.99 → 499 cents)
+DELIVERY_FEE_CENTS = int(os.getenv("DELIVERY_FEE_CENTS", "499"))
 
 
 def publish_notification(user_id: str, order_id: str, status: str, message: str):
@@ -51,10 +53,11 @@ def submit_order(
       6. Return confirmation
     """
 
-    # ── Step 1: Calculate total ────────────────────────────────────────────────
+    # ── Step 1: Calculate total (subtotal + delivery — same as checkout page) ─
     total_cents = 0
     for item in items:
         total_cents += int(round(item["price"] * item["quantity"] * 100))
+    total_cents += DELIVERY_FEE_CENTS
 
     order_id = str(uuid.uuid4())
 
@@ -148,10 +151,24 @@ def get_order_status(order_id: str) -> tuple[dict, int]:
         return {"error": "Failed to fetch order.", "status": "error"}, 502
 
     data = resp.json().get("order", resp.json())
+    # New Orders DB uses total_amount + delivery_address; normalize for the UI.
+    total_cents = data.get("total_cents")
+    if total_cents is None:
+        total_cents = data.get("total_amount")
+    dropoff = data.get("dropoff_address") or data.get("delivery_address")
+    oid = data.get("order_id") or data.get("id") or order_id
+    if total_cents is not None and not isinstance(total_cents, int):
+        try:
+            total_cents = int(total_cents)
+        except (TypeError, ValueError):
+            total_cents = None
     return {
-        "order_id"        : data.get("order_id") or order_id,
+        "order_id"        : oid,
         "status"          : data.get("status"),
-        "dropoff_address" : data.get("dropoff_address"),
-        "total_cents"     : data.get("total_cents"),
+        "dropoff_address" : dropoff,
+        "total_cents"     : total_cents,
         "items"           : data.get("items", []),
+        # Supabase/Postgres store these in UTC; show in browser local time on the client
+        "created_at"      : data.get("created_at"),
+        "updated_at"      : data.get("updated_at"),
     }, 200

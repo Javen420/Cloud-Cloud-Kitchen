@@ -6,6 +6,9 @@ import { Navbar } from "@/components/layout/Navbar";
 import { useCartStore } from "@/store/cartStore";
 import { submitOrder } from "@/api/orderService";
 
+/** Keep in sync with composite `DELIVERY_FEE_CENTS` (default 499 = $4.99). */
+const DELIVERY_FEE_SGD = 4.99;
+
 export default function CustomerCheckout() {
   const [, setLocation] = useLocation();
   const cartItems = useCartStore((state) => state.items);
@@ -341,12 +344,12 @@ export default function CustomerCheckout() {
                   </div>
                   <div className="flex justify-between text-muted-foreground">
                     <span>Delivery</span>
-                    <span className="tabular-nums">$4.99</span>
+                    <span className="tabular-nums">${DELIVERY_FEE_SGD.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between items-baseline pt-3 text-lg font-extrabold text-foreground">
                     <span>Total</span>
                     <span className="text-primary tabular-nums">
-                      ${(cartTotal + 4.99).toFixed(2)}
+                      ${(cartTotal + DELIVERY_FEE_SGD).toFixed(2)}
                     </span>
                   </div>
                 </div>

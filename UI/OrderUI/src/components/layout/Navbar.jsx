@@ -17,23 +17,29 @@ export function Navbar({ role }) {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/50 z-50"
+        className="fixed inset-0 bg-foreground/20 backdrop-blur-[2px] z-50"
         onClick={() => setCartOpen(false)}
+        aria-hidden
       />
 
       {/* Drawer — full viewport height, right side */}
-      <div className="fixed top-0 right-0 bottom-0 w-full sm:max-w-md bg-background/95 backdrop-blur-xl border-l border-white/10 z-50 flex flex-col" style={{ height: "100dvh" }}>
+      <div className="fixed top-0 right-0 bottom-0 w-full sm:max-w-md bg-card/98 backdrop-blur-xl border-l border-border z-50 flex flex-col shadow-2xl" style={{ height: "100dvh" }}>
 
         {/* Header */}
-        <div className="p-6 border-b border-white/5 flex items-center justify-between shrink-0">
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <ShoppingBag className="w-5 h-5 text-primary" /> Your Order
+        <div className="p-6 border-b border-border flex items-center justify-between shrink-0">
+          <h2 className="text-xl font-extrabold flex items-center gap-2 tracking-tight">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <ShoppingBag className="w-5 h-5 text-primary" />
+            </span>
+            Your cart
           </h2>
           <button
+            type="button"
             onClick={() => setCartOpen(false)}
-            className="w-8 h-8 rounded-full hover:bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition"
+            className="w-10 h-10 rounded-xl border border-border hover:bg-muted flex items-center justify-center text-muted-foreground hover:text-foreground transition text-lg leading-none"
+            aria-label="Close cart"
           >
-            ✕
+            ×
           </button>
         </div>
 
@@ -62,7 +68,7 @@ export function Navbar({ role }) {
                       <h4 className="font-semibold text-foreground line-clamp-1">{item.name}</h4>
                       <p className="text-sm text-primary font-medium">${item.price.toFixed(2)}</p>
                     </div>
-                    <div className="flex items-center bg-secondary rounded-lg border border-white/5 w-fit">
+                    <div className="flex items-center bg-muted rounded-lg border border-border w-fit">
                       <button
                         onClick={() => updateQuantity(item.id, item.cartQuantity - 1)}
                         className="w-8 h-8 flex items-center justify-center hover:text-primary transition"
@@ -90,26 +96,27 @@ export function Navbar({ role }) {
 
         {/* Footer — always pinned to bottom */}
         {cartItems.length > 0 && (
-          <div className="p-6 bg-card border-t border-white/5 shrink-0">
-            <div className="space-y-3 mb-6">
-              <div className="flex justify-between text-muted-foreground text-sm">
+          <div className="p-6 bg-muted/30 border-t border-border shrink-0">
+            <div className="space-y-2.5 mb-5 text-sm">
+              <div className="flex justify-between text-muted-foreground">
                 <span>Subtotal</span>
-                <span>${cartTotal.toFixed(2)}</span>
+                <span className="tabular-nums font-medium text-foreground">${cartTotal.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between text-muted-foreground text-sm">
-                <span>Delivery Fee</span>
-                <span>$4.99</span>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Delivery</span>
+                <span className="tabular-nums font-medium text-foreground">$4.99</span>
               </div>
-              <div className="border-t border-white/10 pt-3 flex justify-between font-bold text-xl">
+              <div className="border-t border-border pt-3 flex justify-between items-baseline text-lg font-extrabold text-foreground">
                 <span>Total</span>
-                <span>${(cartTotal + 4.99).toFixed(2)}</span>
+                <span className="text-primary tabular-nums">${(cartTotal + 4.99).toFixed(2)}</span>
               </div>
             </div>
             <button
+              type="button"
               onClick={() => { setCartOpen(false); setLocation("/customer/checkout"); }}
-              className="w-full h-12 text-base font-bold bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-white rounded-xl shadow-lg shadow-primary/25 transition"
+              className="w-full h-12 text-base font-bold bg-primary text-primary-foreground rounded-xl shadow-lg shadow-primary/25 hover:opacity-95 transition active:scale-[0.99]"
             >
-              Proceed to Checkout
+              Go to checkout
             </button>
           </div>
         )}
@@ -120,20 +127,20 @@ export function Navbar({ role }) {
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full glass border-b">
+      <header className="sticky top-0 z-40 w-full glass border-b border-border">
         <div className="container mx-auto px-4 h-16 flex items-center justify-between">
 
           {/* Logo */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20">
-                <UtensilsCrossed className="w-4 h-4 text-white" />
+              <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center shadow-md shadow-primary/25">
+                <UtensilsCrossed className="w-4 h-4 text-primary-foreground" />
               </div>
-              <span className="font-bold text-xl tracking-tight text-foreground hidden sm:block">
+              <span className="font-extrabold text-lg sm:text-xl tracking-tight text-foreground hidden sm:block">
                 Cloud Cloud <span className="text-primary">Kitchen</span>
               </span>
               {role && (
-                <span className="ml-2 px-2 py-0.5 rounded-full bg-secondary text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <span className="ml-1 px-2.5 py-0.5 rounded-full bg-muted border border-border text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                   {role}
                 </span>
               )}
@@ -143,13 +150,14 @@ export function Navbar({ role }) {
           {/* Cart Button */}
           {role === "customer" && location !== "/customer/checkout" && (
             <button
+              type="button"
               onClick={() => setCartOpen(true)}
-              className="relative flex items-center gap-2 px-4 py-2 rounded-lg bg-card hover:bg-secondary border border-white/10 transition"
+              className="relative flex items-center gap-2 px-4 py-2 rounded-xl bg-card hover:bg-muted/80 border border-border shadow-sm transition font-semibold text-sm text-foreground"
             >
-              <ShoppingBag className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm">Cart</span>
+              <ShoppingBag className="w-4 h-4 text-primary" />
+              <span>Cart</span>
               {itemCount > 0 && (
-                <span className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-primary text-[10px] font-bold text-white flex items-center justify-center">
+                <span className="absolute -top-1.5 -right-1.5 min-w-[1.25rem] h-5 px-1 rounded-full bg-primary text-[11px] font-bold text-primary-foreground flex items-center justify-center ring-2 ring-background">
                   {itemCount}
                 </span>
               )}

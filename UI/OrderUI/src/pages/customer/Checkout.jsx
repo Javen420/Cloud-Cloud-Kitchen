@@ -1,16 +1,15 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { MapPin, Phone, User, CheckCircle2, Loader2, CreditCard, Lock } from "lucide-react";
+import { MapPin, Phone, User, CheckCircle2, Loader2, CreditCard, Lock, ArrowLeft } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { useCartStore } from "@/store/cartStore";
 import { submitOrder } from "@/api/orderService";
 
 export default function CustomerCheckout() {
   const [, setLocation] = useLocation();
-  const cartItems = useCartStore(state => state.items);
-  const cartTotal = useCartStore(state => state.getTotal());
-  const clearCart = useCartStore(state => state.clearCart);
+  const cartItems = useCartStore((state) => state.items);
+  const cartTotal = useCartStore((state) => state.getTotal());
 
   const [formData, setFormData] = useState({
     name: "",
@@ -24,6 +23,9 @@ export default function CustomerCheckout() {
   });
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState(null);
+
+  const inputClass =
+    "w-full rounded-xl border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 shadow-sm transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30";
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -58,15 +60,23 @@ export default function CustomerCheckout() {
 
   if (cartItems.length === 0) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="page-customer">
         <Navbar role="customer" />
-        <div className="container mx-auto px-4 py-20 text-center">
-          <h2 className="text-2xl font-bold mb-4">Your cart is empty</h2>
+        <div className="container mx-auto px-4 py-24 max-w-lg text-center">
+          <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-3xl bg-muted text-4xl shadow-inner">
+            🛒
+          </div>
+          <h2 className="text-2xl font-bold text-foreground mb-2">Your cart is empty</h2>
+          <p className="text-muted-foreground text-sm mb-8">
+            Add something delicious from the menu, then come back to checkout.
+          </p>
           <button
+            type="button"
             onClick={() => setLocation("/customer")}
-            className="px-6 py-2 bg-primary text-white rounded-lg hover:bg-primary/90 transition"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 hover:opacity-95 transition"
           >
-            Back to Menu
+            <ArrowLeft className="h-4 w-4" />
+            Back to menu
           </button>
         </div>
       </div>
@@ -74,94 +84,110 @@ export default function CustomerCheckout() {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="page-customer pb-24">
       <Navbar role="customer" />
 
-      <div className="container mx-auto px-4 py-10 max-w-5xl">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-4xl font-bold mb-8">Checkout</h1>
+      <div className="container mx-auto px-4 py-8 max-w-5xl">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+        >
+          <button
+            type="button"
+            onClick={() => setLocation("/customer")}
+            className="mb-6 inline-flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to menu
+          </button>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="mb-8">
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
+              Checkout
+            </h1>
+            <p className="text-muted-foreground mt-2 text-sm md:text-base">
+              Enter your details and you&apos;ll get your order delivered as soon as possible.
+            </p>
+          </div>
 
-            {/* ── Left: Delivery Details Form ── */}
-            <div className="lg:col-span-2 space-y-6">
-              <div className="p-6 bg-card border border-white/5 rounded-xl shadow-xl">
-                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-                  <User className="text-primary w-5 h-5" /> Delivery Details
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 lg:gap-10">
+            <div className="lg:col-span-3 space-y-6">
+              <div className="rounded-3xl border border-border bg-card p-6 md:p-8 shadow-sm">
+                <h3 className="text-lg font-bold flex items-center gap-2 mb-6 text-foreground">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <User className="w-4 h-4" />
+                  </span>
+                  Delivery details
                 </h3>
 
-                <form id="checkout-form" onSubmit={handleSubmit} className="space-y-4">
+                <form id="checkout-form" onSubmit={handleSubmit} className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                    {/* Full Name */}
                     <div className="space-y-2">
-                      <label htmlFor="name" className="text-sm font-medium">
-                        Full Name
+                      <label htmlFor="name" className="text-sm font-semibold text-foreground">
+                        Full name
                       </label>
                       <input
                         id="name"
                         required
-                        placeholder="John Doe"
-                        className="w-full px-3 py-2 rounded-lg bg-secondary/50 border border-white/10 focus:border-primary focus:outline-none text-sm"
+                        placeholder="Simpson"
+                        className={inputClass}
                         value={formData.name}
-                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       />
                     </div>
-
-                    {/* Phone */}
                     <div className="space-y-2">
-                      <label htmlFor="phone" className="text-sm font-medium">
-                        Phone Number
+                      <label htmlFor="phone" className="text-sm font-semibold text-foreground">
+                        Phone
                       </label>
                       <div className="relative">
-                        <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <Phone className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
                         <input
                           id="phone"
                           required
                           placeholder="91234567"
-                          className="w-full pl-10 pr-3 py-2 rounded-lg bg-secondary/50 border border-white/10 focus:border-primary focus:outline-none text-sm"
+                          className={`${inputClass} pl-10`}
                           value={formData.phone}
-                          onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Address */}
                   <div className="space-y-2">
-                    <label htmlFor="address" className="text-sm font-medium">
-                      Delivery Address
+                    <label htmlFor="address" className="text-sm font-semibold text-foreground">
+                      Delivery address
                     </label>
                     <div className="relative">
-                      <MapPin className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <MapPin className="w-4 h-4 absolute left-3 top-3 text-muted-foreground pointer-events-none" />
                       <input
                         id="address"
                         required
-                        placeholder="123 Orchard Rd, #04-01"
-                        className="w-full pl-10 pr-3 py-2 rounded-lg bg-secondary/50 border border-white/10 focus:border-primary focus:outline-none text-sm"
+                        placeholder="67 Orchard Rd, #01-01"
+                        className={`${inputClass} pl-10`}
                         value={formData.address}
-                        onChange={e => setFormData({ ...formData, address: e.target.value })}
+                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                       />
                     </div>
                   </div>
 
-                  {/* Notes */}
                   <div className="space-y-2">
-                    <label htmlFor="notes" className="text-sm font-medium">
-                      Delivery Notes <span className="text-muted-foreground">(Optional)</span>
+                    <label htmlFor="notes" className="text-sm font-semibold text-foreground">
+                      Notes{" "}
+                      <span className="font-normal text-muted-foreground">(optional)</span>
                     </label>
                     <textarea
                       id="notes"
-                      placeholder="Leave at the door, ring the bell..."
-                      className="w-full px-3 py-2 rounded-lg bg-secondary/50 border border-white/10 focus:border-primary focus:outline-none text-sm min-h-[100px] resize-none"
+                      placeholder="Gate code, delivery instructions…"
+                      rows={3}
+                      className={`${inputClass} resize-none min-h-[96px]`}
                       value={formData.notes}
-                      onChange={e => setFormData({ ...formData, notes: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                     />
                   </div>
 
-                  {/* Error Banner */}
                   {error && (
-                    <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+                    <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                       {error}
                     </div>
                   )}
@@ -280,73 +306,69 @@ export default function CustomerCheckout() {
               </div>
             </div>
 
-            {/* ── Right: Order Summary ── */}
-            <div>
-              <div className="p-6 bg-card border border-primary/20 rounded-xl shadow-xl sticky top-24">
-                <h3 className="text-xl font-bold mb-6">Order Summary</h3>
+            <div className="lg:col-span-2">
+              <div className="lg:sticky lg:top-24 rounded-3xl border border-border bg-card p-6 shadow-md ring-1 ring-primary/10">
+                <h3 className="text-lg font-bold text-foreground mb-5">Order summary</h3>
 
-                {/* Cart Items */}
-                <div className="space-y-4 mb-6 max-h-[300px] overflow-y-auto pr-2">
-                  {cartItems.map(item => (
-                    <div key={item.id} className="flex justify-between text-sm">
-                      <div className="flex gap-2">
-                        <span className="font-semibold text-primary">{item.cartQuantity}x</span>
-                        <span className="text-muted-foreground">{item.name}</span>
-                      </div>
-                      <span className="font-medium">
+                <ul className="space-y-3 mb-6 max-h-[280px] overflow-y-auto pr-1">
+                  {cartItems.map((item) => (
+                    <li
+                      key={item.id}
+                      className="flex justify-between gap-3 text-sm border-b border-border/60 pb-3 last:border-0 last:pb-0"
+                    >
+                      <span className="text-muted-foreground">
+                        <span className="font-semibold text-foreground">{item.cartQuantity}×</span>{" "}
+                        {item.name}
+                      </span>
+                      <span className="font-semibold tabular-nums shrink-0">
                         ${(item.price * item.cartQuantity).toFixed(2)}
                       </span>
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
 
-                {/* Totals */}
-                <div className="space-y-3 pt-4 border-t border-white/10 mb-6">
-                  <div className="flex justify-between text-muted-foreground text-sm">
+                <div className="space-y-2.5 pt-2 border-t border-border text-sm">
+                  <div className="flex justify-between text-muted-foreground">
                     <span>Subtotal</span>
-                    <span>${cartTotal.toFixed(2)}</span>
+                    <span className="tabular-nums">${cartTotal.toFixed(2)}</span>
                   </div>
-                  <div className="flex justify-between text-muted-foreground text-sm">
-                    <span>Delivery Fee</span>
-                    <span>$4.99</span>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Delivery</span>
+                    <span className="tabular-nums">$4.99</span>
                   </div>
-                  <div className="flex justify-between font-bold text-xl pt-2">
+                  <div className="flex justify-between items-baseline pt-3 text-lg font-extrabold text-foreground">
                     <span>Total</span>
-                    <span className="text-primary">${(cartTotal + 4.99).toFixed(2)}</span>
+                    <span className="text-primary tabular-nums">
+                      ${(cartTotal + 4.99).toFixed(2)}
+                    </span>
                   </div>
                 </div>
 
-                {/* Submit Button */}
                 <button
                   type="submit"
                   form="checkout-form"
                   disabled={isPending}
-                  className="w-full h-12 text-base font-bold bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg shadow-lg shadow-primary/25 flex items-center justify-center gap-2 transition"
+                  className="mt-6 w-full h-12 rounded-xl text-base font-bold bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition active:scale-[0.99]"
                 >
                   {isPending ? (
                     <>
                       <Loader2 className="h-5 w-5 animate-spin" />
-                      Processing...
+                      Processing…
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="h-5 w-5" />
-                      Place Order
+                      <Lock className="h-4 w-4 opacity-90" />
+                      Continue to payment
                     </>
                   )}
                 </button>
 
-                {/* Back to menu */}
-                <button
-                  type="button"
-                  onClick={() => setLocation("/customer")}
-                  className="w-full mt-3 text-sm text-muted-foreground hover:text-foreground transition text-center"
-                >
-                  ← Back to Menu
-                </button>
+                <p className="mt-4 text-center text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-accent" />
+                  Secured by Stripe
+                </p>
               </div>
             </div>
-
           </div>
         </motion.div>
       </div>

@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
-import { CheckCircle2, Clock, ChefHat, Truck, Loader2 } from "lucide-react";
+import { CheckCircle2, Clock, ChefHat, Truck, Loader2, Package } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { getOrderStatus } from "@/api/orderService";
 import { getFcmRegistrationToken, onForegroundMessage } from "@/lib/firebase";
 import { subscribeToOrderTopic } from "@/api/notificationService";
 
 const STATUS_STEPS = [
-  { key: "confirmed",   label: "Order Confirmed",  icon: CheckCircle2 },
-  { key: "preparing",   label: "Being Prepared",   icon: ChefHat },
-  { key: "out_for_delivery", label: "Out for Delivery", icon: Truck },
-  { key: "delivered",   label: "Delivered",        icon: CheckCircle2 },
+  { key: "confirmed", label: "Order confirmed", icon: CheckCircle2 },
+  { key: "preparing", label: "Being prepared", icon: ChefHat },
+  { key: "out_for_delivery", label: "Out for delivery", icon: Truck },
+  { key: "delivered", label: "Delivered", icon: Package },
 ];
 
 export default function OrderTracking() {
@@ -39,7 +39,6 @@ export default function OrderTracking() {
     };
 
     fetchOrder();
-    // Poll every 10 seconds for status updates
     interval = setInterval(fetchOrder, 10000);
     return () => clearInterval(interval);
   }, [orderId]);
@@ -62,8 +61,8 @@ export default function OrderTracking() {
             total_amount: data.total_amount ? Number(data.total_amount) : prev?.total_amount,
           }));
         });
-      } catch (e) {
-        // ignore push setup failures; polling remains as fallback
+      } catch {
+        // polling fallback
       }
     })();
     return () => {
@@ -71,61 +70,90 @@ export default function OrderTracking() {
     };
   }, [orderId]);
 
-  const currentStepIndex = order
-    ? STATUS_STEPS.findIndex(s => s.key === order.status)
-    : 0;
+  const rawStep = order ? STATUS_STEPS.findIndex((s) => s.key === order.status) : -1;
+  const currentStepIndex = rawStep < 0 ? -1 : rawStep;
 
   return (
-    <div className="min-h-screen bg-background pb-20">
+    <div className="page-customer pb-24">
       <Navbar role="customer" />
 
-      <div className="container mx-auto px-4 py-10 max-w-2xl">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-4xl font-bold mb-2">Order Tracking</h1>
-          <p className="text-muted-foreground mb-8">Order ID: <span className="text-primary font-mono">{orderId}</span></p>
+      <div className="container mx-auto px-4 py-8 max-w-lg">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+        >
+          <div className="mb-8">
+            <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+              Track order
+            </h1>
+            <p className="text-sm text-muted-foreground mt-2">
+              Order ID{" "}
+              <span className="font-mono text-xs bg-muted px-2 py-0.5 rounded-md text-foreground">
+                {orderId}
+              </span>
+            </p>
+          </div>
 
           {loading && (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <Loader2 className="w-10 h-10 animate-spin text-primary" />
+              <p className="text-sm text-muted-foreground">Loading status…</p>
             </div>
           )}
 
-          {error && (
-            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm">
+          {error && !loading && (
+            <div className="rounded-2xl border border-destructive/25 bg-destructive/5 p-4 text-sm text-destructive">
               {error}
             </div>
           )}
 
-          {order && (
+          {order && !loading && (
             <div className="space-y-6">
-
-              {/* Status Steps */}
-              <div className="p-6 bg-card border border-white/5 rounded-xl shadow-xl">
-                <div className="space-y-6">
-                  {STATUS_STEPS.map((step, index) => {
-                    const Icon = step.icon;
-                    const isDone = index <= currentStepIndex;
-                    const isCurrent = index === currentStepIndex;
-                    return (
-                      <div key={step.key} className="flex items-center gap-4">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 transition ${
-                          isDone ? "bg-primary text-white" : "bg-secondary/50 text-muted-foreground"
-                        } ${isCurrent ? "ring-2 ring-primary ring-offset-2 ring-offset-background" : ""}`}>
-                          <Icon className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <p className={`font-medium ${isDone ? "text-foreground" : "text-muted-foreground"}`}>
-                            {step.label}
-                          </p>
-                          {isCurrent && (
-                            <p className="text-xs text-primary mt-0.5 flex items-center gap-1">
-                              <Clock className="w-3 h-3" /> In progress...
+              <div className="rounded-3xl border border-border bg-card p-6 md:p-8 shadow-sm">
+                <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-6">
+                  Progress
+                </h2>
+                <div className="relative">
+                  <div
+                    className="absolute left-[19px] top-3 bottom-3 w-0.5 bg-border rounded-full"
+                    aria-hidden
+                  />
+                  <ul className="space-y-0">
+                    {STATUS_STEPS.map((step, index) => {
+                      const Icon = step.icon;
+                      const isDone = currentStepIndex >= 0 && index <= currentStepIndex;
+                      const isCurrent = index === currentStepIndex;
+                      return (
+                        <li key={step.key} className="relative flex gap-4 pb-8 last:pb-0">
+                          <div
+                            className={`relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border-2 transition-all ${
+                              isDone
+                                ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/20"
+                                : "border-border bg-muted/50 text-muted-foreground"
+                            } ${isCurrent ? "ring-4 ring-primary/15 scale-105" : ""}`}
+                          >
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          <div className="pt-1.5 min-w-0">
+                            <p
+                              className={`font-semibold ${
+                                isDone ? "text-foreground" : "text-muted-foreground"
+                              }`}
+                            >
+                              {step.label}
                             </p>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                            {isCurrent && (
+                              <p className="text-xs text-primary mt-1 flex items-center gap-1.5">
+                                <Clock className="w-3.5 h-3.5 shrink-0" />
+                                In progress…
+                              </p>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
                 </div>
               </div>
 
@@ -146,10 +174,11 @@ export default function OrderTracking() {
 
               {order.status === "delivered" && (
                 <button
+                  type="button"
                   onClick={() => setLocation("/customer")}
-                  className="w-full py-3 bg-primary hover:bg-primary/90 text-white font-bold rounded-xl transition"
+                  className="w-full py-3.5 rounded-xl bg-primary text-primary-foreground font-bold shadow-lg shadow-primary/20 hover:opacity-95 transition"
                 >
-                  Order Again
+                  Order again
                 </button>
               )}
             </div>

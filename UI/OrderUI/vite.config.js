@@ -12,6 +12,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react()],
+    // Read VITE_* variables from repository root `.env`
+    envDir: REPO_ROOT,
     resolve: {
       alias: { "@": path.resolve(__dirname, "./src") },
     },

@@ -11,6 +11,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@stripe/react-stripe-js": "^3.7.0",
+    "@stripe/stripe-js": "^4.8.0",
     "firebase": "^11.0.1",
     "framer-motion": "^11.0.0",
     "lucide-react": "^0.460.0",

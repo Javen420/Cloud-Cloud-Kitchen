@@ -95,6 +95,62 @@ def process_payment(
         }, 500
 
 
+def create_payment_intent(
+    order_id: str,
+    customer_id: str,
+    amount_cents: int,
+    currency: str,
+    idempotency_key: str,
+) -> tuple[dict, int]:
+    if not stripe.api_key:
+        return {"error": "STRIPE_SECRET_KEY is not set"}, 500
+
+    try:
+        intent = stripe.PaymentIntent.create(
+            amount=amount_cents,
+            currency=currency,
+            metadata={
+                "order_id": order_id,
+                "customer_id": customer_id,
+            },
+            automatic_payment_methods={"enabled": True},
+            # Keep wallet-capable card methods (Apple Pay / Google Pay),
+            # but hide local methods not wanted in this flow.
+            excluded_payment_method_types=["grabpay", "paynow"],
+            idempotency_key=idempotency_key,
+        )
+        return {
+            "payment_intent_id": intent.id,
+            "client_secret": intent.client_secret,
+            "amount_cents": amount_cents,
+            "currency": currency,
+        }, 200
+    except stripe.error.StripeError as e:
+        return {"error": str(e)}, 503
+    except Exception as e:
+        return {"error": f"Unexpected error: {str(e)}"}, 500
+
+
+def verify_payment_intent(
+    payment_intent_id: str,
+) -> tuple[dict, int]:
+    if not stripe.api_key:
+        return {"error": "STRIPE_SECRET_KEY is not set"}, 500
+
+    try:
+        intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+        return {
+            "payment_id": intent.id,
+            "status": intent.status,
+            "amount_cents": intent.amount,
+            "currency": intent.currency,
+        }, 200
+    except stripe.error.StripeError as e:
+        return {"error": str(e)}, 503
+    except Exception as e:
+        return {"error": f"Unexpected error: {str(e)}"}, 500
+
+
 def capture_payment(
     db: Client,
     payment_intent_id: str,

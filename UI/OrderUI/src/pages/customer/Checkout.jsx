@@ -1,13 +1,37 @@
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
+import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
 import { MapPin, Phone, User, CheckCircle2, Loader2, CreditCard, Lock, ArrowLeft } from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { useCartStore } from "@/store/cartStore";
 import { submitOrder } from "@/api/orderService";
+import { createPaymentIntent } from "@/api/paymentService";
 
 /** Keep in sync with composite `DELIVERY_FEE_CENTS` (default 499 = $4.99). */
 const DELIVERY_FEE_SGD = 4.99;
+const DELIVERY_FEE_CENTS = 499;
+const STRIPE_PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || "";
+const stripePromise = STRIPE_PUBLISHABLE_KEY ? loadStripe(STRIPE_PUBLISHABLE_KEY) : null;
+
+function StripePaymentFields({ onReady }) {
+  const stripe = useStripe();
+  const elements = useElements();
+
+  useEffect(() => {
+    onReady({ stripe, elements });
+  }, [stripe, elements, onReady]);
+
+  return (
+    <div className="space-y-3">
+      <PaymentElement />
+      <p className="text-xs text-muted-foreground flex items-center gap-1 pt-1">
+        <Lock className="w-3 h-3" /> Apple Pay, Google Pay, and cards are supported.
+      </p>
+    </div>
+  );
+}
 
 export default function CustomerCheckout() {
   const [, setLocation] = useLocation();
@@ -20,22 +44,78 @@ export default function CustomerCheckout() {
     phone: "",
     address: "",
     notes: "",
-    cardNumber: "",
-    cardExpiry: "",
-    cardCvc: "",
-    cardName: "",
   });
   const [isPending, setIsPending] = useState(false);
+  const [isPaymentBootstrapping, setIsPaymentBootstrapping] = useState(true);
   const [error, setError] = useState(null);
+  const [clientSecret, setClientSecret] = useState("");
+  const [paymentIntentId, setPaymentIntentId] = useState("");
+  const [intentIdempotencyKey, setIntentIdempotencyKey] = useState("");
+  const [stripeCtx, setStripeCtx] = useState({ stripe: null, elements: null });
+  const totalCents = useMemo(
+    () => Math.round(cartTotal * 100) + DELIVERY_FEE_CENTS,
+    [cartTotal],
+  );
 
   const inputClass =
     "w-full rounded-xl border border-border bg-input px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 shadow-sm transition focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30";
+
+  const preparePaymentIntent = useCallback(async () => {
+    if (!STRIPE_PUBLISHABLE_KEY) {
+      setError("Missing VITE_STRIPE_PUBLISHABLE_KEY for Stripe Payment Element.");
+      setIsPaymentBootstrapping(false);
+      return;
+    }
+    setIsPaymentBootstrapping(true);
+    setError(null);
+    try {
+      const orderId = crypto.randomUUID();
+      const idempotencyKey = crypto.randomUUID();
+      const customerId = formData.phone || formData.name || "customer";
+      const intent = await createPaymentIntent({
+        order_id: orderId,
+        customer_id: customerId,
+        amount_cents: totalCents,
+        currency: "sgd",
+        idempotency_key: idempotencyKey,
+      });
+      setIntentIdempotencyKey(idempotencyKey);
+      setPaymentIntentId(intent.payment_intent_id);
+      setClientSecret(intent.client_secret);
+    } catch (err) {
+      setError(err.message || "Unable to initialize payment.");
+    } finally {
+      setIsPaymentBootstrapping(false);
+    }
+  }, [formData.phone, formData.name, totalCents]);
+
+  useEffect(() => {
+    preparePaymentIntent();
+  }, [preparePaymentIntent]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsPending(true);
     setError(null);
     try {
+      const { stripe, elements } = stripeCtx;
+      if (!stripe || !elements || !clientSecret) {
+        throw new Error("Payment form is still loading. Please try again.");
+      }
+
+      const { error: submitError } = await elements.submit();
+      if (submitError) throw new Error(submitError.message || "Payment details are incomplete.");
+
+      const { error: confirmError, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        clientSecret,
+        redirect: "if_required",
+      });
+      if (confirmError) throw new Error(confirmError.message || "Payment confirmation failed.");
+      if (!paymentIntent?.id || !["succeeded", "requires_capture"].includes(paymentIntent.status)) {
+        throw new Error("Payment not completed yet. Please try again.");
+      }
+
       const data = await submitOrder({
         customer_id: formData.phone || formData.name || "customer",
         items: cartItems.map((item) => ({
@@ -45,13 +125,8 @@ export default function CustomerCheckout() {
           price: item.price,
         })),
         dropoff_address: formData.address,
-        idempotency_key: crypto.randomUUID(),
-        payment: {
-          card_number: formData.cardNumber.replace(/\s/g, ""),
-          card_expiry: formData.cardExpiry.replace(/\s/g, ""),
-          card_cvc: formData.cardCvc,
-          card_name: formData.cardName,
-        },
+        idempotency_key: intentIdempotencyKey || crypto.randomUUID(),
+        payment_intent_id: paymentIntent.id || paymentIntentId,
       });
 
       if (data.status === "confirmed" && data.order_id) {
@@ -210,109 +285,24 @@ export default function CustomerCheckout() {
                   <CreditCard className="text-primary w-5 h-5" /> Payment Details
                 </h3>
 
-                <div className="space-y-4">
-                  {/* Card Number */}
-                  <div className="space-y-2">
-                    <label htmlFor="cardNumber" className="text-sm font-medium">
-                      Card Number
-                    </label>
-                    <div className="relative">
-                      <CreditCard className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <input
-                        id="cardNumber"
-                        name="cardnumber"
-                        required
-                        form="checkout-form"
-                        inputMode="numeric"
-                        autoComplete="cc-number"
-                        placeholder="4242 4242 4242 4242"
-                        maxLength={19}
-                        className="w-full pl-10 pr-3 py-2 rounded-lg bg-secondary/50 border border-white/10 focus:border-primary focus:outline-none text-sm tracking-wider"
-                        value={formData.cardNumber}
-                        onChange={e => {
-                          const raw = e.target.value.replace(/\D/g, "").slice(0, 16);
-                          const formatted = raw.replace(/(\d{4})(?=\d)/g, "$1 ");
-                          setFormData({ ...formData, cardNumber: formatted });
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {/* Expiry */}
-                    <div className="space-y-2">
-                      <label htmlFor="cardExpiry" className="text-sm font-medium">
-                        Expiry
-                      </label>
-                      <input
-                        id="cardExpiry"
-                        name="cc-exp"
-                        required
-                        form="checkout-form"
-                        inputMode="numeric"
-                        autoComplete="cc-exp"
-                        placeholder="MM / YY"
-                        maxLength={7}
-                        className="w-full px-3 py-2 rounded-lg bg-secondary/50 border border-white/10 focus:border-primary focus:outline-none text-sm tracking-wider"
-                        value={formData.cardExpiry}
-                        onChange={e => {
-                          const raw = e.target.value.replace(/\D/g, "").slice(0, 4);
-                          const formatted = raw.length > 2 ? raw.slice(0, 2) + " / " + raw.slice(2) : raw;
-                          setFormData({ ...formData, cardExpiry: formatted });
-                        }}
-                      />
-                    </div>
-
-                    {/* CVC */}
-                    <div className="space-y-2">
-                      <label htmlFor="cardCvc" className="text-sm font-medium">
-                        CVC
-                      </label>
-                      <div className="relative">
-                        <Lock className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                        <input
-                          id="cardCvc"
-                          name="cvc"
-                          required
-                          form="checkout-form"
-                          inputMode="numeric"
-                          autoComplete="cc-csc"
-                          placeholder="123"
-                          maxLength={4}
-                          type="password"
-                          className="w-full pl-10 pr-3 py-2 rounded-lg bg-secondary/50 border border-white/10 focus:border-primary focus:outline-none text-sm tracking-wider"
-                          value={formData.cardCvc}
-                          onChange={e => {
-                            const raw = e.target.value.replace(/\D/g, "").slice(0, 4);
-                            setFormData({ ...formData, cardCvc: raw });
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Name on Card */}
-                    <div className="space-y-2 col-span-2 md:col-span-1">
-                      <label htmlFor="cardName" className="text-sm font-medium">
-                        Name on Card
-                      </label>
-                      <input
-                        id="cardName"
-                        name="ccname"
-                        required
-                        form="checkout-form"
-                        autoComplete="cc-name"
-                        placeholder="John Doe"
-                        className="w-full px-3 py-2 rounded-lg bg-secondary/50 border border-white/10 focus:border-primary focus:outline-none text-sm"
-                        value={formData.cardName}
-                        onChange={e => setFormData({ ...formData, cardName: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <p className="text-xs text-muted-foreground flex items-center gap-1 pt-1">
-                    <Lock className="w-3 h-3" /> Your payment info is securely processed via Stripe
+                {!stripePromise ? (
+                  <p className="text-sm text-destructive">
+                    Stripe key missing. Set `VITE_STRIPE_PUBLISHABLE_KEY`.
                   </p>
-                </div>
+                ) : isPaymentBootstrapping ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading payment methods...
+                  </div>
+                ) : clientSecret ? (
+                  <Elements stripe={stripePromise} options={{ clientSecret }}>
+                    <StripePaymentFields onReady={setStripeCtx} />
+                  </Elements>
+                ) : (
+                  <p className="text-sm text-destructive">
+                    Unable to load payment methods. Refresh and try again.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -357,7 +347,7 @@ export default function CustomerCheckout() {
                 <button
                   type="submit"
                   form="checkout-form"
-                  disabled={isPending}
+                  disabled={isPending || isPaymentBootstrapping || !clientSecret}
                   className="mt-6 w-full h-12 rounded-xl text-base font-bold bg-primary text-primary-foreground shadow-lg shadow-primary/20 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition active:scale-[0.99]"
                 >
                   {isPending ? (

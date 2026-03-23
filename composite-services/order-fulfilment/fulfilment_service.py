@@ -42,6 +42,7 @@ def submit_order(
     dropoff_lat: float | None,
     dropoff_lng: float | None,
     idempotency_key: str,
+    payment_intent_id: str | None = None,
 ) -> tuple[dict, int]:
     """
     Orchestrates the full order flow:
@@ -61,41 +62,72 @@ def submit_order(
 
     order_id = str(uuid.uuid4())
 
-    # ── Step 2: Process payment (steps 4-7 in diagram) ─────────────────────────
-    with httpx.Client(timeout=10.0) as client:
-        payment_resp = client.post(
-            f"{PAYMENT_URL}/api/v1/payment",
-            json={
-                "order_id"        : order_id,
-                "customer_id"     : customer_id,
-                "amount_cents"    : total_cents,
-                "currency"        : "sgd",
-                "idempotency_key" : idempotency_key,
-            },
-        )
+    # ── Step 2: Process/verify payment ──────────────────────────────────────────
+    if payment_intent_id:
+        with httpx.Client(timeout=10.0) as client:
+            payment_resp = client.get(f"{PAYMENT_URL}/api/v1/payment/intents/{payment_intent_id}")
+        if payment_resp.status_code != 200:
+            try:
+                err_body = payment_resp.json()
+            except Exception:
+                err_body = {"error": f"Payment service returned {payment_resp.status_code}"}
+            return {
+                "order_id"   : order_id,
+                "status"     : "failed",
+                "total_cents": total_cents,
+                "error"      : err_body.get("error", "Payment verification failed"),
+            }, payment_resp.status_code
+        payment_data = payment_resp.json()
+        if payment_data.get("status") not in ("succeeded", "requires_capture"):
+            return {
+                "order_id"   : order_id,
+                "status"     : "failed",
+                "total_cents": total_cents,
+                "error"      : "Payment has not succeeded.",
+            }, 402
+        if int(payment_data.get("amount_cents", 0)) != total_cents:
+            return {
+                "order_id": order_id,
+                "status": "failed",
+                "total_cents": total_cents,
+                "error": "Payment amount does not match checkout total.",
+            }, 400
+        payment_data["payment_id"] = payment_data.get("payment_id") or payment_intent_id
+    else:
+        with httpx.Client(timeout=10.0) as client:
+            payment_resp = client.post(
+                f"{PAYMENT_URL}/api/v1/payment",
+                json={
+                    "order_id"        : order_id,
+                    "customer_id"     : customer_id,
+                    "amount_cents"    : total_cents,
+                    "currency"        : "sgd",
+                    "idempotency_key" : idempotency_key,
+                },
+            )
 
-    if payment_resp.status_code != 200:
-        try:
-            err_body = payment_resp.json()
-        except Exception:
-            err_body = {"error": f"Payment service returned {payment_resp.status_code}"}
-        return {
-            "order_id"   : order_id,
-            "status"     : "failed",
-            "total_cents": total_cents,
-            "error"      : err_body.get("error", "Payment service error"),
-        }, payment_resp.status_code
+        if payment_resp.status_code != 200:
+            try:
+                err_body = payment_resp.json()
+            except Exception:
+                err_body = {"error": f"Payment service returned {payment_resp.status_code}"}
+            return {
+                "order_id"   : order_id,
+                "status"     : "failed",
+                "total_cents": total_cents,
+                "error"      : err_body.get("error", "Payment service error"),
+            }, payment_resp.status_code
 
-    payment_data = payment_resp.json()
+        payment_data = payment_resp.json()
 
-    # ── Step 3: Payment failed → stop here ─────────────────────────────────────
-    if payment_data.get("status") != "succeeded":
-        return {
-            "order_id"   : order_id,
-            "status"     : "failed",
-            "total_cents": total_cents,
-            "error"      : payment_data.get("error", "Payment was not successful"),
-        }, 402
+        # ── Step 3: Payment failed → stop here ─────────────────────────────────
+        if payment_data.get("status") != "succeeded":
+            return {
+                "order_id"   : order_id,
+                "status"     : "failed",
+                "total_cents": total_cents,
+                "error"      : payment_data.get("error", "Payment was not successful"),
+            }, 402
 
     # ── Step 4: Create order in New Orders (step 8 in diagram) ─────────────────
     with httpx.Client(timeout=10.0) as client:

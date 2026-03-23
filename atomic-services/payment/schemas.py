@@ -9,6 +9,21 @@ class PaymentRequest(BaseModel):
     idempotency_key : str
 
 
+class CreatePaymentIntentRequest(BaseModel):
+    order_id        : str
+    customer_id     : str
+    amount_cents    : int = Field(..., gt=0)
+    currency        : str = "sgd"
+    idempotency_key : str
+
+
+class CreatePaymentIntentResponse(BaseModel):
+    payment_intent_id : str
+    client_secret     : str
+    amount_cents      : int
+    currency          : str = "sgd"
+
+
 class PaymentResult(BaseModel):
     payment_id      : str | None = None
     order_id        : str

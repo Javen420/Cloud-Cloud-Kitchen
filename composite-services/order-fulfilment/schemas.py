@@ -16,6 +16,7 @@ class OrderSubmission(BaseModel):
     dropoff_lat      : float | None = None
     dropoff_lng      : float | None = None
     idempotency_key  : str
+    payment_intent_id: str | None = None
 
 
 class OrderSubmissionResponse(BaseModel):

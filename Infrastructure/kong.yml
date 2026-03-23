@@ -25,6 +25,15 @@ services:
       methods: ["GET"]
       strip_path: false
 
+- name: payment
+  url: http://payment:8089
+  routes:
+    - name: payment-routes
+      paths:
+        - /api/v1/payment
+      methods: ["POST", "GET", "OPTIONS"]
+      strip_path: false
+
 
   # Scenario 2
 - name: assign-kitchen

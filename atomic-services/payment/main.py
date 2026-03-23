@@ -12,8 +12,22 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.append(str(ROOT_DIR))
 
 from shared.database import get_supabase
-from schemas import PaymentRequest, PaymentResult, CapturePaymentRequest, RefundPaymentRequest
-from payment import process_payment, capture_payment, refund_payment, get_payment
+from schemas import (
+    PaymentRequest,
+    PaymentResult,
+    CapturePaymentRequest,
+    RefundPaymentRequest,
+    CreatePaymentIntentRequest,
+    CreatePaymentIntentResponse,
+)
+from payment import (
+    process_payment,
+    create_payment_intent,
+    verify_payment_intent,
+    capture_payment,
+    refund_payment,
+    get_payment,
+)
 
 app = FastAPI(title="Payment Service", version="2.0.0")
 
@@ -35,6 +49,24 @@ def pay(
         currency=payload.currency,
         idempotency_key=payload.idempotency_key,
     )
+    return JSONResponse(content=response, status_code=status_code)
+
+
+@app.post("/api/v1/payment/intents", response_model=CreatePaymentIntentResponse)
+def create_intent(payload: CreatePaymentIntentRequest):
+    response, status_code = create_payment_intent(
+        order_id=payload.order_id,
+        customer_id=payload.customer_id,
+        amount_cents=payload.amount_cents,
+        currency=payload.currency,
+        idempotency_key=payload.idempotency_key,
+    )
+    return JSONResponse(content=response, status_code=status_code)
+
+
+@app.get("/api/v1/payment/intents/{payment_intent_id}")
+def get_intent(payment_intent_id: str):
+    response, status_code = verify_payment_intent(payment_intent_id=payment_intent_id)
     return JSONResponse(content=response, status_code=status_code)
 
 

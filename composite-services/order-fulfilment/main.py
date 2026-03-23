@@ -26,6 +26,7 @@ def submit(payload: OrderSubmission):
         dropoff_lat=payload.dropoff_lat,
         dropoff_lng=payload.dropoff_lng,
         idempotency_key=payload.idempotency_key,
+        payment_intent_id=payload.payment_intent_id,
     )
     return JSONResponse(content=response, status_code=status_code)
 

@@ -1,11 +1,20 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from schemas import OrderSubmission, OrderSubmissionResponse
-from fulfilment_service import submit_order, get_order_status
+from fulfilment_service import submit_order, get_order_status, publisher, RABBITMQ_URL
 
-app = FastAPI(title="Order Fulfilment Service", version="2.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await publisher.connect(RABBITMQ_URL)
+    yield
+    await publisher.close()
+
+
+app = FastAPI(title="Order Fulfilment Service", version="2.0.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,9 +26,9 @@ app.add_middleware(
 
 
 @app.post("/api/v1/order/submit", response_model=OrderSubmissionResponse)
-def submit(payload: OrderSubmission):
+async def submit(payload: OrderSubmission):
     items = [item.model_dump() for item in payload.items]
-    response, status_code = submit_order(
+    response, status_code = await submit_order(
         customer_id=payload.customer_id,
         items=items,
         dropoff_address=payload.dropoff_address,
@@ -32,8 +41,8 @@ def submit(payload: OrderSubmission):
 
 
 @app.get("/api/v1/order/{order_id}")
-def get_order(order_id: str):
-    response, status_code = get_order_status(order_id=order_id)
+async def get_order(order_id: str):
+    response, status_code = await get_order_status(order_id=order_id)
     return JSONResponse(content=response, status_code=status_code)
 
 

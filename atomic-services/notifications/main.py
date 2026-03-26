@@ -40,7 +40,7 @@ RETRY_QUEUE_NAME = os.getenv("NOTIFICATION_RETRY_QUEUE", "notifications.retry")
 DLQ_NAME = os.getenv("NOTIFICATION_DLQ", "notifications.dlq")
 RETRY_DELAY_MS = int(os.getenv("NOTIFICATION_RETRY_DELAY_MS", "5000"))
 MAX_RETRIES = int(os.getenv("NOTIFICATION_MAX_RETRIES", "3"))
-EXCHANGE_NAME = os.getenv("NOTIFICATION_EXCHANGE", "")  # default exchange
+EXCHANGE_NAME = os.getenv("NOTIFICATION_EXCHANGE", "order_events")
 PUBLISH_TOPIC_PREFIX = os.getenv("FCM_TOPIC_PREFIX", "order_")
 
 
@@ -55,9 +55,8 @@ class UnsubscribeRequest(BaseModel):
 
 
 async def _consume_and_forward():
-    _init_firebase()
-
     connection = await aio_pika.connect_robust(RABBITMQ_URL)
+    print("Connected to RabbitMQ")
     channel = await connection.channel()
 
     # Ensure queues exist for retry/DLQ (works with default exchange publishing)
@@ -107,6 +106,7 @@ async def _consume_and_forward():
                     if not order_id:
                         raise ValueError("missing order_id")
 
+                    _init_firebase()
                     topic = f"{PUBLISH_TOPIC_PREFIX}{order_id}"
                     fcm_msg = messaging.Message(
                         topic=topic,
@@ -129,9 +129,16 @@ async def _consume_and_forward():
                 # message.process() will ack unless we raise; we always consume/route then ack.
 
 
+async def _safe_consume():
+    try:
+        await _consume_and_forward()
+    except Exception as e:
+        print(f"Consumer task crashed: {e}", flush=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = asyncio.create_task(_consume_and_forward())
+    task = asyncio.create_task(_safe_consume())
     yield
     task.cancel()
     with contextlib.suppress(Exception):

@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
         decode_responses=True,
     )
     app.state.eta_client = ETAClient(settings.eta_calculation_url)
-    await publisher.connect(settings.rabbitmq_url)
+    await publisher.connect(settings.rabbitmq_url, exchange_name="order_events")
     app.state.publisher = publisher
     yield
     await publisher.close()

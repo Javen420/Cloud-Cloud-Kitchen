@@ -19,7 +19,7 @@ type Config struct {
 func Load() *Config {
 	_ = godotenv.Load("../../.env") //loading directly from .env file
 	return &Config{
-		Port:          getEnv("PORT", "8084"),
+		Port:          getEnv("PORT", "8088"),
 		GoogleAPIKey:  os.Getenv("GOOGLE_ROUTES_API_KEY"),
 		GoogleBaseURL: getEnv("GOOGLE_ROUTES_BASE_URL", "https://routes.googleapis.com"),
 	}

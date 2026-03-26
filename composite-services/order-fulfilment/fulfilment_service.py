@@ -1,8 +1,9 @@
 import os
 import uuid
-import pika
 import json
 import httpx
+
+from shared.AMQP_Publisher import AMQPPublisher
 
 PAYMENT_URL    = os.getenv("PAYMENT_URL", "http://payment:8089")
 NEW_ORDERS_URL = os.getenv("NEW_ORDERS_URL", "https://personal-dkkhoptv.outsystemscloud.com/NewOrders/rest/OrdersAPI")
@@ -10,32 +11,20 @@ RABBITMQ_URL   = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 # Must match checkout UI delivery line (default $4.99 → 499 cents)
 DELIVERY_FEE_CENTS = int(os.getenv("DELIVERY_FEE_CENTS", "499"))
 
-
-def publish_notification(user_id: str, order_id: str, status: str, message: str):
-    try:
-        connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
-        channel = connection.channel()
-        channel.exchange_declare(exchange="order_events", exchange_type="topic", durable=True)
-
-        payload = json.dumps({
-            "user_id"  : user_id,
-            "order_id" : order_id,
-            "status"   : status,
-            "message"  : message,
-        })
-
-        channel.basic_publish(
-            exchange="order_events",
-            routing_key="order.created",
-            body=payload,
-            properties=pika.BasicProperties(delivery_mode=2),
-        )
-        connection.close()
-    except Exception as e:
-        print(f"Notification publish failed: {e}")
+# Shared async publisher — initialised in main.py lifespan
+publisher = AMQPPublisher()
 
 
-def submit_order(
+async def publish_notification(user_id: str, order_id: str, status: str, message: str):
+    await publisher.publish("order.created", {
+        "user_id"  : user_id,
+        "order_id" : order_id,
+        "status"   : status,
+        "message"  : message,
+    })
+
+
+async def submit_order(
     customer_id: str,
     items: list,
     dropoff_address: str,
@@ -64,8 +53,8 @@ def submit_order(
 
     # ── Step 2: Process/verify payment ──────────────────────────────────────────
     if payment_intent_id:
-        with httpx.Client(timeout=10.0) as client:
-            payment_resp = client.get(f"{PAYMENT_URL}/api/v1/payment/intents/{payment_intent_id}")
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            payment_resp = await client.get(f"{PAYMENT_URL}/api/v1/payment/intents/{payment_intent_id}")
         if payment_resp.status_code != 200:
             try:
                 err_body = payment_resp.json()
@@ -94,8 +83,8 @@ def submit_order(
             }, 400
         payment_data["payment_id"] = payment_data.get("payment_id") or payment_intent_id
     else:
-        with httpx.Client(timeout=10.0) as client:
-            payment_resp = client.post(
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            payment_resp = await client.post(
                 f"{PAYMENT_URL}/api/v1/payment",
                 json={
                     "order_id"        : order_id,
@@ -130,8 +119,8 @@ def submit_order(
             }, 402
 
     # ── Step 4: Create order in New Orders (step 8 in diagram) ─────────────────
-    with httpx.Client(timeout=10.0) as client:
-        order_resp = client.post(
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        order_resp = await client.post(
             f"{NEW_ORDERS_URL}",
             json={
                 "CustId"     : customer_id,
@@ -154,7 +143,7 @@ def submit_order(
     final_order_id = order_data.get("order_id", order_id)
 
     # ── Step 5: Publish notification (step 9 in diagram) ───────────────────────
-    publish_notification(
+    await publish_notification(
         user_id=customer_id,
         order_id=final_order_id,
         status="confirmed",
@@ -170,38 +159,14 @@ def submit_order(
     }, 200
 
 
-def get_order_status(order_id: str) -> tuple[dict, int]:
-    with httpx.Client(timeout=10.0) as client:
-        resp = client.get(f"{NEW_ORDERS_URL}{order_id}")
+async def get_order_status(order_id: str) -> tuple[dict, int]:
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        resp = await client.get(f"{NEW_ORDERS_URL}{order_id}")
 
     if resp.status_code == 404:
         return {"error": "Order not found.", "status": "not_found"}, 404
 
     if resp.status_code != 200:
         return {"error": "Failed to fetch order.", "status": "error"}, 502
-    if resp.status_code == 200:
-        return {"status": "ok"}, 200
 
-
-    # data = resp.json().get("order", resp.json())
-    # # New Orders DB uses total_amount + delivery_address; normalize for the UI.
-    # total_cents = data.get("total_cents")
-    # if total_cents is None:
-    #     total_cents = data.get("total_amount")
-    # dropoff = data.get("dropoff_address") or data.get("delivery_address")
-    # oid = data.get("order_id") or data.get("id") or order_id
-    # if total_cents is not None and not isinstance(total_cents, int):
-    #     try:
-    #         total_cents = int(total_cents)
-    #     except (TypeError, ValueError):
-    #         total_cents = None
-    # return {
-    #     "order_id"        : oid,
-    #     "status"          : data.get("status"),
-    #     "dropoff_address" : dropoff,
-    #     "total_cents"     : total_cents,
-    #     "items"           : data.get("items", []),
-    #     # Supabase/Postgres store these in UTC; show in browser local time on the client
-    #     "created_at"      : data.get("created_at"),
-    #     "updated_at"      : data.get("updated_at"),
-    # }, 200
+    return {"status": "ok"}, 200

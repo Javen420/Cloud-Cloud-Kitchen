@@ -40,7 +40,7 @@ RETRY_QUEUE_NAME = os.getenv("NOTIFICATION_RETRY_QUEUE", "notifications.retry")
 DLQ_NAME = os.getenv("NOTIFICATION_DLQ", "notifications.dlq")
 RETRY_DELAY_MS = int(os.getenv("NOTIFICATION_RETRY_DELAY_MS", "5000"))
 MAX_RETRIES = int(os.getenv("NOTIFICATION_MAX_RETRIES", "3"))
-EXCHANGE_NAME = os.getenv("NOTIFICATION_EXCHANGE", "")  # default exchange
+EXCHANGE_NAME = os.getenv("NOTIFICATION_EXCHANGE", "order_events")
 PUBLISH_TOPIC_PREFIX = os.getenv("FCM_TOPIC_PREFIX", "order_")
 
 

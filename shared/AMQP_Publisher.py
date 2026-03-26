@@ -17,7 +17,7 @@ class AMQPPublisher: #class creation
         self._channel = None
         self._exchange = None
 
-    async def connect(self, rabbitmq_url: str, exchange_name: str = "delivery"): #connection method
+    async def connect(self, rabbitmq_url: str, exchange_name: str = "order_events"): #connection method
         self._connection = await aio_pika.connect_robust(rabbitmq_url)
         self._channel = await self._connection.channel()
         self._exchange = await self._channel.declare_exchange(

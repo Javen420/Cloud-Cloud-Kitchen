@@ -1,0 +1,8 @@
+aio-pika
+fastapi
+httpx
+pydantic
+pydantic-settings
+python-dotenv
+redis[hiredis]
+uvicorn[standard]

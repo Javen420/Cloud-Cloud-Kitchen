@@ -3,9 +3,46 @@ import requests
 from dataclasses import dataclass
 from typing import List, Tuple
 
-GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "")
-GEOCODING_URL       = "https://maps.googleapis.com/maps/api/geocode/json"
+# Kitchen assignment: prefer Maps key (Geocoding + Distance Matrix); fall back to Routes key if unset.
+GOOGLE_MAPS_API_KEY = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+GOOGLE_ROUTES_API_KEY = os.environ.get("GOOGLE_ROUTES_API_KEY", "").strip()
+
+GEOCODING_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 DISTANCE_MATRIX_URL = "https://maps.googleapis.com/maps/api/distancematrix/json"
+
+_KEY_RESTRICTION_HINT = (
+    "If your key uses \"HTTP referrers\" restrictions, it only works in browsers — "
+    "not from this server. Use a server key with no referrer restriction, "
+    "or \"IP addresses\" restriction for your deployment egress IP."
+)
+
+
+def _kitchen_google_key() -> str:
+    """
+    GOOGLE_MAPS_API_KEY → kitchen (Geocoding + Distance Matrix).
+    GOOGLE_ROUTES_API_KEY → fallback only if Maps key is not set (e.g. shared dev key).
+
+    Enable **Geocoding API** and **Distance Matrix API** on the Maps key’s GCP project.
+    """
+    key = GOOGLE_MAPS_API_KEY or GOOGLE_ROUTES_API_KEY
+    if not key:
+        raise MapsClientError(
+            "Set GOOGLE_MAPS_API_KEY (preferred) or GOOGLE_ROUTES_API_KEY. "
+            "Kitchen assignment uses Geocoding API + Distance Matrix API."
+        )
+    return key
+
+
+def _geocode_error(body: dict) -> MapsClientError:
+    status = body.get("status", "")
+    msg = body.get("error_message", "") or ""
+    extra = ""
+    if status == "REQUEST_DENIED" or "denied" in msg.lower():
+        extra = f" {_KEY_RESTRICTION_HINT}"
+    return MapsClientError(
+        f"Geocoding API error: {status} — {msg}.{extra} "
+        'Enable "Geocoding API" on this key in Google Cloud Console.'
+    )
 
 
 @dataclass
@@ -13,25 +50,41 @@ class DistanceResult:
     destination_index: int
     distance_meters: float
     duration_seconds: float
-    status: str  # "OK", "NOT_FOUND", "ZERO_RESULTS", etc.
+    status: str  # "OK", "NOT_FOUND", etc.
 
 
 class MapsClientError(Exception):
-    """Raised when the Maps API returns an unexpected error."""
+    """Raised when Google APIs return an unexpected error."""
 
 
 class MapsClient:
     """
-    Thin, atomic wrapper around the Google Maps Distance Matrix API.
+    Thin wrapper: Geocoding API + Distance Matrix API (original kitchen-assignment design).
+    Picks nearest kitchen by driving distance from geocoded delivery address.
     """
 
-    def __init__(self, api_key: str = GOOGLE_MAPS_API_KEY):
-        if not api_key:
-            raise MapsClientError(
-                "GOOGLE_MAPS_API_KEY is not set. "
-                "Export it as an environment variable before starting the service."
-            )
-        self._api_key = api_key
+    def __init__(self, api_key: str | None = None):
+        self._api_key = (api_key or _kitchen_google_key()).strip()
+
+    def geocode(self, address: str) -> Tuple[float, float]:
+        params = {"address": address, "key": self._api_key}
+
+        try:
+            resp = requests.get(GEOCODING_URL, params=params, timeout=10)
+            resp.raise_for_status()
+        except requests.RequestException as exc:
+            raise MapsClientError(f"Geocoding HTTP request failed: {exc}") from exc
+
+        body = resp.json()
+        status = body.get("status", "")
+
+        if status == "ZERO_RESULTS":
+            raise MapsClientError(f"Geocoding returned no results for address: '{address}'")
+        if status != "OK":
+            raise _geocode_error(body)
+
+        location = body["results"][0]["geometry"]["location"]
+        return location["lat"], location["lng"]
 
     def distance_matrix(
         self,
@@ -39,20 +92,6 @@ class MapsClient:
         destinations: List[Tuple[float, float]],
         mode: str = "driving",
     ) -> List[DistanceResult]:
-        """
-        Query the Distance Matrix API for one origin against N destinations.
-
-        Args:
-            origin: (lat, lng) of the delivery address.
-            destinations: list of (lat, lng) for each candidate kitchen.
-            mode: travel mode — "driving" | "walking" | "bicycling" | "transit"
-
-        Returns:
-            List[DistanceResult] in the same order as `destinations`.
-
-        Raises:
-            MapsClientError: on HTTP errors or API-level REQUEST_DENIED / INVALID_REQUEST.
-        """
         origin_str = f"{origin[0]},{origin[1]}"
         dest_str = "|".join(f"{lat},{lng}" for lat, lng in destinations)
 
@@ -64,22 +103,27 @@ class MapsClient:
         }
 
         try:
-            resp = requests.get(DISTANCE_MATRIX_URL, params=params, timeout=10)
+            resp = requests.get(DISTANCE_MATRIX_URL, params=params, timeout=15)
             resp.raise_for_status()
         except requests.RequestException as exc:
-            raise MapsClientError(f"HTTP request to Google Maps failed: {exc}") from exc
+            raise MapsClientError(f"Distance Matrix HTTP request failed: {exc}") from exc
 
         body = resp.json()
         top_status = body.get("status", "")
+        err_msg = body.get("error_message", "") or ""
 
         if top_status not in ("OK",):
+            extra = ""
+            if top_status == "REQUEST_DENIED" or "denied" in err_msg.lower():
+                extra = f" {_KEY_RESTRICTION_HINT}"
             raise MapsClientError(
-                f"Google Maps API error: {top_status} — {body.get('error_message', '')}"
+                f"Distance Matrix API error: {top_status} — {err_msg}.{extra} "
+                'Enable "Distance Matrix API" (and billing) on this key in Google Cloud Console.'
             )
 
         rows = body.get("rows", [])
         if not rows:
-            raise MapsClientError("Google Maps returned no rows.")
+            raise MapsClientError("Distance Matrix returned no rows.")
 
         elements = rows[0].get("elements", [])
         results: List[DistanceResult] = []
@@ -90,13 +134,12 @@ class MapsClient:
                 results.append(
                     DistanceResult(
                         destination_index=idx,
-                        distance_meters=element["distance"]["value"],
-                        duration_seconds=element["duration"]["value"],
+                        distance_meters=float(element["distance"]["value"]),
+                        duration_seconds=float(element["duration"]["value"]),
                         status="OK",
                     )
                 )
             else:
-                # Keep entry so indices stay aligned; caller decides how to handle.
                 results.append(
                     DistanceResult(
                         destination_index=idx,
@@ -108,57 +151,16 @@ class MapsClient:
 
         return results
 
-    def geocode(self, address: str) -> Tuple[float, float]:
-        """
-        Convert a human-readable address string into (lat, lng) coordinates.
-
-        Args:
-            address: e.g. "123 Orchard Rd, Singapore 238858"
-
-        Returns:
-            (lat, lng) float tuple of the best-match result.
-
-        Raises:
-            MapsClientError: if the address cannot be resolved.
-        """
-        params = {"address": address, "key": self._api_key}
-
-        try:
-            resp = requests.get(GEOCODING_URL, params=params, timeout=10)
-            resp.raise_for_status()
-        except requests.RequestException as exc:
-            raise MapsClientError(f"HTTP request to Geocoding API failed: {exc}") from exc
-
-        body = resp.json()
-        status = body.get("status", "")
-
-        if status == "ZERO_RESULTS":
-            raise MapsClientError(f"Geocoding returned no results for address: '{address}'")
-        if status != "OK":
-            raise MapsClientError(
-                f"Geocoding API error: {status} — {body.get('error_message', '')}"
-            )
-
-        location = body["results"][0]["geometry"]["location"]
-        return location["lat"], location["lng"]
-
     def nearest(
         self,
         origin: Tuple[float, float],
         destinations: List[Tuple[float, float]],
         mode: str = "driving",
     ) -> Tuple[int, DistanceResult]:
-        """
-        Returns (index, DistanceResult) for the closest reachable destination,
-        ranked by driving distance. Origin is a (lat, lng) tuple.
-
-        Raises:
-            MapsClientError: if no destination is reachable.
-        """
         results = self.distance_matrix(origin, destinations, mode)
         reachable = [r for r in results if r.status == "OK"]
         if not reachable:
-            raise MapsClientError("No reachable destinations found.")
+            raise MapsClientError("No reachable kitchens (Distance Matrix).")
         best = min(reachable, key=lambda r: r.distance_meters)
         return best.destination_index, best
 
@@ -168,16 +170,5 @@ class MapsClient:
         destinations: List[Tuple[float, float]],
         mode: str = "driving",
     ) -> Tuple[int, DistanceResult]:
-        """
-        Geocodes `address`, then finds the nearest destination.
-        This is the primary entry point for the assignment flow.
-
-        Args:
-            address:      delivery address string from the orders table.
-            destinations: list of (lat, lng) for each candidate kitchen.
-
-        Returns:
-            (index into destinations, DistanceResult) for the nearest kitchen.
-        """
         origin = self.geocode(address)
         return self.nearest(origin, destinations, mode)

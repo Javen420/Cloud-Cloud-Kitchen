@@ -28,7 +28,7 @@ export default function AvailableOrdersPage() {
   return (
     <RiderLayout
       title="Nearby Available Orders"
-      subtitle="These jobs are payment-confirmed and eligible for rider assignment."
+      subtitle="Kitchen-ready orders (status: ready) — assign yourself to deliver."
     >
       <div className="summary-banner">
         <div>

@@ -30,3 +30,9 @@ class AssignmentResponse(BaseModel):
     kitchen_address: str
     distance_meters: float
     duration_seconds: float
+
+
+class KitchenOrderStatusUpdate(BaseModel):
+    """Kitchen staff: preparing → ready (pickup queue for riders)."""
+
+    status: str

@@ -55,6 +55,22 @@ def list_unassigned(db: Client) -> tuple[dict, int]:
     return {"orders": result.data}, 200
 
 
+def list_rider_eligible(db: Client) -> tuple[dict, int]:
+    """
+    Orders the kitchen has marked ready for pickup / driver assignment.
+    (Kitchen flow: pending → preparing → ready → driver_assigned)
+    """
+    result = (
+        db.table("orders")
+        .select("*")
+        .eq("status", "ready")
+        .order("updated_at")
+        .limit(20)
+        .execute()
+    )
+    return {"orders": result.data}, 200
+
+
 def update_order_status(db: Client, order_id: str, status: str) -> tuple[dict, int]:
     result = db.table("orders").select("*").eq("id", order_id).execute()
 

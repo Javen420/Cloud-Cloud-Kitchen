@@ -1,0 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply bg-kitchen-bg text-slate-100 antialiased min-h-screen;
+}

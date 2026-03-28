@@ -17,7 +17,7 @@ function normalizeOrder(raw) {
   return {
     id: raw.id,
     paymentStatus: "SUCCESS",
-    riderEligible: raw.status === "pending",
+    riderEligible: raw.status === "ready",
     payout: payoutDollars > 0 ? payoutDollars : 4.99,
     distanceFromRider: "Calculating...",
     etaToPickup: "Calculating...",
@@ -38,7 +38,7 @@ function normalizeOrder(raw) {
 }
 
 /**
- * Fetches all pending (driver-unassigned) orders from the Assign Driver CS.
+ * Fetches kitchen-ready orders (status `ready`) from the Assign Driver composite.
  */
 export async function getAvailableOrders() {
   const resp = await fetch(`${BASE_URL}/api/v1/driver/orders`);

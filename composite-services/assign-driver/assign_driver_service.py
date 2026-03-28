@@ -12,11 +12,11 @@ publisher = AMQPPublisher()
 
 async def get_available_orders() -> tuple[dict, int]:
     """
-    Fetches all pending (unassigned) orders from the new-orders service.
-    These are orders confirmed by payment but not yet picked up by a driver.
+    Fetches kitchen-ready orders from new-orders (`status == ready`).
+    Kitchen board moves: pending → preparing → ready; riders see the ready queue.
     """
     async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(f"{NEW_ORDERS_URL}/api/v1/orders/unassigned")
+        resp = await client.get(f"{NEW_ORDERS_URL}/api/v1/orders/rider-eligible")
 
     if resp.status_code != 200:
         return {"error": "Failed to fetch available orders."}, 502

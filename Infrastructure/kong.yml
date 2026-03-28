@@ -36,13 +36,13 @@ services:
 
 
   # Scenario 2
-- name: assign-kitchen
-  url: http://assign-kitchen:8083
+- name: kitchen-assignment
+  url: http://kitchen-assignment:8091
   routes:
-    - name: assign-kitchen-routes
+    - name: kitchen-assignment-routes
       paths:
-        - /api/v1/kitchen/orders
-      methods: [ "GET" ]
+        - /api/v1/kitchen
+      methods: ["GET", "POST", "PUT", "OPTIONS"]
       strip_path: false
 
 - name: order-fulfilment-coord
@@ -110,6 +110,7 @@ plugins:
       - "http://localhost:3000"
       - "http://localhost:5173"
       - "http://localhost:5174"
+      - "http://localhost:5175"
       #i assume we are gonna use vite, change to 3000 if using react app or smt
     methods:
       - GET

@@ -13,7 +13,7 @@ Scenario 1:
   order-fulfilment       | port 8081 | POST /api/v1/order/submit
 
 Scenario 2:
-  assign-kitchen         | port 8083 | GET  /api/v1/kitchen/orders
+  kitchen-assignment     | port 8091 | GET/POST/PUT /api/v1/kitchen/...
   order-fulfilment-coord | port 8084 | POST /api/v1/order/fulfil
 
 Scenario 3:

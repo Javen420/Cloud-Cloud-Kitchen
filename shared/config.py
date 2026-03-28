@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     order_fulfilment_url: str = "http://localhost:8081"
 
     # Scenario 2
-    assign_kitchen_url: str = "http://localhost:8083"
+    assign_kitchen_url: str = "http://localhost:8091"
     order_fulfilment_coord_url: str = "http://localhost:8084"
 
     # Scenario 3

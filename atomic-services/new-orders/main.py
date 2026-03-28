@@ -13,7 +13,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from shared.database import get_supabase
 from schemas import CreateOrderRequest, UpdateStatusRequest
-from order import create_order, get_order, list_unassigned, update_order_status
+from order import create_order, get_order, list_unassigned, list_rider_eligible, update_order_status
 
 app = FastAPI(title="New Orders Service", version="2.0.0")
 
@@ -43,6 +43,12 @@ def create(
 @app.get("/api/v1/orders/unassigned")
 def unassigned(db: Client = Depends(get_db)):
     response, status_code = list_unassigned(db=db)
+    return JSONResponse(content=response, status_code=status_code)
+
+
+@app.get("/api/v1/orders/rider-eligible")
+def rider_eligible(db: Client = Depends(get_db)):
+    response, status_code = list_rider_eligible(db=db)
     return JSONResponse(content=response, status_code=status_code)
 
 

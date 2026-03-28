@@ -13,6 +13,11 @@ def assign_kitchen_to_order(
 
     order = order_result.data[0]
 
+    if order.get("status") != "pending":
+        return {
+            "error": "Order is not available for kitchen acceptance (must be pending).",
+        }, 409
+
     delivery_address = order.get("delivery_address")
     if not delivery_address:
         return {
@@ -46,6 +51,15 @@ def assign_kitchen_to_order(
     # ── 4. Build response ─────────────────────────────────────────────────────
     nearest_kitchen = kitchens[best_idx]
 
+    # Move order into kitchen workflow (rider queue lists `ready` only — see rider-eligible endpoint).
+    db.table("orders").update({"status": "preparing"}).eq("id", order_id).execute()
+    try:
+        db.table("orders").update({"assigned_kitchen": nearest_kitchen["name"]}).eq(
+            "id", order_id
+        ).execute()
+    except Exception:
+        pass
+
     return {
         "order_id":          order_id,
         "user_id":           order.get("user_id"),
@@ -55,6 +69,8 @@ def assign_kitchen_to_order(
         "kitchen_id":        nearest_kitchen["id"],
         "kitchen_name":      nearest_kitchen["name"],
         "kitchen_address":   nearest_kitchen["address"],
+        "kitchen_lat":       nearest_kitchen.get("lat"),
+        "kitchen_lng":       nearest_kitchen.get("lng"),
         "distance_meters":   distance_result.distance_meters,
         "duration_seconds":  distance_result.duration_seconds,
     }, 200

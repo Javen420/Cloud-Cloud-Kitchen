@@ -183,6 +183,25 @@ services:
         condition: service_healthy
 
 #UI
+  kitchen:
+    image: node:20-alpine
+    working_dir: /app
+    env_file: ../.env
+    volumes:
+      - ../UI/KitchenUI:/app
+      - /app/node_modules
+    environment:
+      - HOST=0.0.0.0
+      # Inside Docker, localhost:8000 is wrong — proxy must hit the Kong container
+      - VITE_API_BASE_URL=http://kong:8000
+    command: sh -c "npm install --silent && npm run dev -- --host 0.0.0.0 --port 5175"
+    ports:
+      - "5175:5175"
+    depends_on:
+      - kong
+      - kitchen-assignment
+    restart: unless-stopped
+
   order:
     image: node:20-alpine
     working_dir: /app
@@ -193,7 +212,10 @@ services:
     environment:
       - HOST=0.0.0.0
       - PORT=5173
+      - VITE_API_BASE_URL=http://kong:8000
     command: sh -c "npm install --silent && npm run dev -- --host 0.0.0.0 --port 5173"
     ports:
       - "5173:5173"
+    depends_on:
+      - kong
     restart: unless-stopped

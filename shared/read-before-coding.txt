@@ -32,7 +32,7 @@ All available fields and their defaults:
   stripe_secret_key     ""
   outsystems_menu_url   ""
   order_fulfilment_url  "http://localhost:8081"
-  assign_kitchen_url    "http://localhost:8083"
+  assign_kitchen_url    "http://localhost:8091"
   order_fulfilment_coord_url "http://localhost:8084"
   assign_driver_url     "http://localhost:8086"
   eta_tracking_url      "http://localhost:8087"

@@ -118,6 +118,44 @@ services:
     ports:
       - "8091:8091"
 
+  assign-kitchen:
+    build:
+      context: ..
+      dockerfile: composite-services/assign-kitchen/Dockerfile
+    env_file: ../.env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      KITCHEN_ASSIGNMENT_URL: http://kitchen-assignment:8091
+      NEW_ORDERS_URL: http://new-orders:8082
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
+      POLL_INTERVAL_SECONDS: "10"
+    ports:
+      - "8093:8093"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      kitchen-assignment:
+        condition: service_started
+      new-orders:
+        condition: service_started
+
+  coordinate-fulfilment:
+    build:
+      context: ..
+      dockerfile: composite-services/coordinate-fulfilment/Dockerfile
+    env_file: ../.env
+    environment:
+      PYTHONUNBUFFERED: "1"
+      NEW_ORDERS_URL: http://new-orders:8082
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
+      POLL_INTERVAL_SECONDS: "10"
+    ports:
+      - "8094:8094"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      new-orders:
+        condition: service_started
 #Scenario 3
   eta-calculator:
     build:
@@ -174,6 +212,8 @@ services:
       context: ..
       dockerfile: atomic-services/notifications/Dockerfile
     env_file: ../.env
+    environment:
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ../atomic-services/notifications/firebase-service-account.json:/app/firebase-service-account.json:ro
     ports:

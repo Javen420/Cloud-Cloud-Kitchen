@@ -72,10 +72,11 @@ Important keys:
   - `STRIPE_WEBHOOK_SECRET`
 - **OutSystems**
   - `OUTSYSTEMS_MENU_URL`
+  - `OUTSYSTEMS_NEWORDERS_URL` (base only, no `#...` fragment)
 - **RabbitMQ**
   - `RABBITMQ_URL` should be `amqp://guest:guest@rabbitmq:5672/` (or match your configured user/pass)
 - **Service-to-service URLs (inside Docker)**
-  - `NEW_ORDERS_URL=http://new-orders:8082`
+  - `NEW_ORDERS_URL=${OUTSYSTEMS_NEWORDERS_URL}` for `order-fulfilment` (Scenario 1)
   - `PAYMENT_URL=http://payment:8089`
 
 ### Docker gotchas (very important)
@@ -106,8 +107,15 @@ Order flow is synchronous with Payment Intents:
 
 - Frontend creates/uses a payment intent via `payment` endpoints (`/api/v1/payment/*`).
 - Frontend then calls `POST /api/v1/order/submit` via Kong.
-- `order-fulfilment` verifies payment status/amount and creates the order in `new-orders`.
+- `order-fulfilment` verifies payment status/amount and creates the order in OutSystems Orders API (`/api/v1/orders`).
 - Order confirmation is returned directly to UI.
+
+### Scenario 1 OutSystems guardrail
+
+To avoid silent tracking failures, `order-fulfilment` now verifies OutSystems create-order response:
+- Create must return a usable, non-zero `OrderId`.
+- Service immediately verifies retrievability via `GET /api/v1/order?OrderId=...`.
+- If verification fails, submit returns failure (5xx) instead of `confirmed`.
 
 ### Webhook (local dev)
 
@@ -141,6 +149,9 @@ Scenario 1 (Order):
 - `GET /api/v1/order/{order_id}` -> `order-fulfilment:8081`
 - `POST|GET /api/v1/payment/*` -> `payment:8089`
 - `GET /api/v1/menu` -> OutSystems Menu API
+  - internally uses OutSystems Orders API:
+    - `POST /api/v1/orders`
+    - `GET /api/v1/order?OrderId=...`
 
 Scenario 2 (Kitchen):
 - `GET|PUT /api/v1/kitchen/*` -> `coordinate-fulfilment:8094`

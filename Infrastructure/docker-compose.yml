@@ -96,7 +96,7 @@ services:
       dockerfile: composite-services/order-fulfilment/Dockerfile
     env_file: ../.env
     environment:
-      NEW_ORDERS_URL: http://new-orders:8082
+      NEW_ORDERS_URL: ${OUTSYSTEMS_NEWORDERS_URL:-https://personal-dkkhoptv.outsystemscloud.com/NewOrders/rest/OrdersAPI}
       PAYMENT_URL: http://payment:8089
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASS}@rabbitmq:5672/
     ports:

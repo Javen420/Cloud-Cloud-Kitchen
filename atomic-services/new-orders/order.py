@@ -3,6 +3,7 @@ from supabase import Client
 
 def create_order(
     db: Client,
+    order_id: str | None,
     customer_id: str,
     items: list[dict],
     total_cents: int,
@@ -12,13 +13,16 @@ def create_order(
     payment_id: str,
 ) -> tuple[dict, int]:
 
-    result = db.table("orders").insert({
+    payload = {
+        # allow caller to set id so it's stable across services
+        **({"id": order_id} if order_id else {}),
         "user_id"          : customer_id,
         "items"            : items,
         "total_amount"     : total_cents,
         "delivery_address" : dropoff_address,
         "status"           : "pending",
-    }).execute()
+    }
+    result = db.table("orders").insert(payload).execute()
 
     if not result.data:
         return {"error": "Failed to create order."}, 500

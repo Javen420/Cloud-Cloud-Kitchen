@@ -29,6 +29,7 @@ def create(
 ):
     response, status_code = create_order(
         db=db,
+        order_id=payload.order_id,
         customer_id=payload.customer_id,
         items=payload.items,
         total_cents=payload.total_cents,

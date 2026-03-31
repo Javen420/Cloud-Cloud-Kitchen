@@ -4,6 +4,9 @@ from datetime import datetime
 
 
 class CreateOrderRequest(BaseModel):
+    # Optional override so composites can mint the UUID once and
+    # keep a single order id across services.
+    order_id        : str | None = None
     customer_id     : str
     items           : list[dict]
     total_cents     : int

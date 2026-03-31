@@ -1,12 +1,11 @@
 import os
 import uuid
-import json
 import httpx
 
 from shared.AMQP_Publisher import AMQPPublisher
 
 PAYMENT_URL    = os.getenv("PAYMENT_URL", "http://payment:8089")
-NEW_ORDERS_URL = os.getenv("NEW_ORDERS_URL", "https://personal-dkkhoptv.outsystemscloud.com/NewOrders/rest/OrdersAPI")
+NEW_ORDERS_URL = os.getenv("NEW_ORDERS_URL", "http://new-orders:8082")
 RABBITMQ_URL   = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 # Must match checkout UI delivery line (default $4.99 → 499 cents)
 DELIVERY_FEE_CENTS = int(os.getenv("DELIVERY_FEE_CENTS", "499"))
@@ -118,29 +117,36 @@ async def submit_order(
                 "error"      : payment_data.get("error", "Payment was not successful"),
             }, 402
 
-    # ── Step 4: Create order in New Orders (step 8 in diagram) ─────────────────
+    # ── Step 4: Create order in New Orders ──────────────────────────────────────
     async with httpx.AsyncClient(timeout=10.0) as client:
         order_resp = await client.post(
-            f"{NEW_ORDERS_URL}",
+            f"{NEW_ORDERS_URL}/api/v1/orders",
             json={
-                "CustId"     : customer_id,
-                "Items"           : items,
-                "TotalPrice"     : total_cents,
-                "DeliveryAddress" : dropoff_address,
-                "PaymentId"      : payment_data.get("payment_id", ""),
+                "customer_id": customer_id,
+                "items": items,
+                "total_cents": total_cents,
+                "dropoff_address": dropoff_address,
+                "dropoff_lat": dropoff_lat,
+                "dropoff_lng": dropoff_lng,
+                "payment_id": payment_data.get("payment_id", ""),
             },
         )
 
     if order_resp.status_code not in (200, 201):
+        try:
+            order_err = order_resp.json()
+            detail = order_err.get("error", "Failed to create order.")
+        except Exception:
+            detail = "Failed to create order."
         return {
             "order_id"   : order_id,
             "status"     : "failed",
             "total_cents": total_cents,
-            "error"      : "Failed to create order.",
+            "error"      : detail,
         }, 500
 
     order_data = order_resp.json()
-    final_order_id = order_data.get("order_id", order_id)
+    final_order_id = order_data.get("order_id") or order_data.get("id") or order_id
 
     # ── Step 5: Publish notification (step 9 in diagram) ───────────────────────
     await publish_notification(
@@ -161,7 +167,7 @@ async def submit_order(
 
 async def get_order_status(order_id: str) -> tuple[dict, int]:
     async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(f"{NEW_ORDERS_URL}{order_id}")
+        resp = await client.get(f"{NEW_ORDERS_URL}/api/v1/orders/{order_id}")
 
     if resp.status_code == 404:
         return {"error": "Order not found.", "status": "not_found"}, 404
@@ -169,4 +175,4 @@ async def get_order_status(order_id: str) -> tuple[dict, int]:
     if resp.status_code != 200:
         return {"error": "Failed to fetch order.", "status": "error"}, 502
 
-    return {"status": "ok"}, 200
+    return resp.json(), 200

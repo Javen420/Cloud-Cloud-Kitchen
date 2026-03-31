@@ -6,10 +6,10 @@ const REPO_ROOT = path.resolve(__dirname, "../..");
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, REPO_ROOT, "");
-  const coordTarget =
-    process.env.VITE_COORDINATE_PROXY_TARGET ||
-    env.VITE_COORDINATE_PROXY_TARGET ||
-    "http://localhost:8094";
+  const apiTarget =
+    process.env.VITE_KONG_PROXY_TARGET ||
+    env.VITE_KONG_PROXY_TARGET ||
+    "http://localhost:8000";
 
   return {
     plugins: [react()],
@@ -20,13 +20,9 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5174,
       proxy: {
-        "/coord": {
-          target: coordTarget,
+        "/api": {
+          target: apiTarget,
           changeOrigin: true,
-          rewrite: (p) => {
-            const stripped = p.replace(/^\/coord/, "");
-            return stripped === "" ? "/" : stripped;
-          },
         },
       },
     },

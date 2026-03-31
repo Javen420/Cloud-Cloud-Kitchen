@@ -1,11 +1,12 @@
 /**
- * Coordinate fulfilment service (composite) — same contract as the legacy HTML dashboard.
- * Dev: Vite proxies `/coord` → `VITE_COORDINATE_PROXY_TARGET` (default http://localhost:8094).
+ * Kitchen UI talks to Kong at `/api/v1/kitchen/*` (same gateway pattern as OrderUI/RiderUI).
+ * Kong forwards those routes to `coordinate-fulfilment`.
  */
-const BASE = import.meta.env.VITE_COORDINATE_BASE || "/coord";
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const KITCHEN_API = `${BASE_URL}/api/v1/kitchen`;
 
 export async function fetchOrdersByStatus(status) {
-  const res = await fetch(`${BASE}/orders?status=${encodeURIComponent(status)}`);
+  const res = await fetch(`${KITCHEN_API}/orders?status=${encodeURIComponent(status)}`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data.error || res.statusText || "Failed to load orders");
@@ -14,7 +15,7 @@ export async function fetchOrdersByStatus(status) {
 }
 
 export async function updateOrderStatus(orderId, status) {
-  const res = await fetch(`${BASE}/orders/${encodeURIComponent(orderId)}/status`, {
+  const res = await fetch(`${KITCHEN_API}/orders/${encodeURIComponent(orderId)}/status`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ status }),
@@ -29,7 +30,7 @@ export async function updateOrderStatus(orderId, status) {
 /** True when coordinate-fulfilment is reachable. */
 export async function fetchCoordinateHealth() {
   try {
-    const res = await fetch(`${BASE}/health`);
+    const res = await fetch(`${KITCHEN_API}/health`);
     return res.ok;
   } catch {
     return false;

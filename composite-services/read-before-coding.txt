@@ -13,8 +13,14 @@ Scenario 1:
   order-fulfilment       | port 8081 | POST /api/v1/order/submit
 
 Scenario 2:
-  assign-kitchen         | port 8083 | GET  /api/v1/kitchen/orders
-  order-fulfilment-coord | port 8084 | POST /api/v1/order/fulfil
+  assign-kitchen         | port 8093 | background poller only; GET /health (not exposed via Kong)
+  coordinate-fulfilment  | port 8094 | GET /orders, PUT /orders/{id}/status (kitchen dashboard)
+  Kong kitchen gateway   | port 8000 | /api/v1/kitchen/* → coordinate-fulfilment
+
+UI gateway pattern (match OrderUI/RiderUI/KitchenUI):
+  BASE_URL = import.meta.env.VITE_API_BASE_URL || ""
+  Use fetch(`${BASE_URL}/api/v1/...`) from UI clients
+  Local Vite may proxy /api to Kong; in Docker/browser, BASE_URL can be http://localhost:8000
 
 Scenario 3:
   assign-driver          | port 8086 | GET, PUT /api/v1/driver/assign

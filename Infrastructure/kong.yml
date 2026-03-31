@@ -34,24 +34,26 @@ services:
       methods: ["POST", "GET", "OPTIONS"]
       strip_path: false
 
-
   # Scenario 2
-- name: assign-kitchen
-  url: http://assign-kitchen:8083
+  # assign-kitchen is a background poller only (no HTTP API for listing orders).
+  # Kitchen UI talks to coordinate-fulfilment through Kong at /api/v1/kitchen/*.
+
+- name: kitchen-coordinate
+  url: http://coordinate-fulfilment:8094
   routes:
-    - name: assign-kitchen-routes
+    - name: kitchen-coordinate-routes
       paths:
-        - /api/v1/kitchen/orders
-      methods: [ "GET" ]
+        - /api/v1/kitchen
+      methods: [ "GET", "PUT", "OPTIONS" ]
       strip_path: false
 
-- name: order-fulfilment-coord
-  url: http://order-fulfilment-coord:8084
+- name: assign-kitchen-health
+  url: http://assign-kitchen:8093
   routes:
-    - name: order-fulfilment-coord-routes
+    - name: assign-kitchen-health-routes
       paths:
-        - /api/v1/order/fulfil
-      methods: [ "POST" ]
+        - /api/v1/kitchen-assign/health
+      methods: [ "GET", "OPTIONS" ]
       strip_path: false
 
   # Scenario 3

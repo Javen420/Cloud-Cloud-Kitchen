@@ -42,6 +42,11 @@ def health():
     return {"status": "healthy"}
 
 
+@app.get("/api/v1/kitchen-assign/health")
+def health_via_gateway():
+    return {"status": "healthy"}
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8093)

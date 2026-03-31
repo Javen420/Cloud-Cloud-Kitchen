@@ -33,8 +33,9 @@ class Settings(BaseSettings):
     order_fulfilment_url: str = "http://localhost:8081"
 
     # Scenario 2
-    assign_kitchen_url: str = "http://localhost:8083"
-    order_fulfilment_coord_url: str = "http://localhost:8084"
+    assign_kitchen_url: str = "http://localhost:8093"
+    # Coordinate fulfilment powers the Kitchen dashboard APIs.
+    order_fulfilment_coord_url: str = "http://localhost:8094"
 
     # Scenario 3
     assign_driver_url: str = "http://localhost:8086"

@@ -49,6 +49,12 @@ async def list_orders(status: str = "pending"):
     return JSONResponse(content=response, status_code=status_code)
 
 
+@app.get("/api/v1/kitchen/orders")
+async def list_orders_kitchen(status: str = "pending"):
+    response, status_code = await get_orders_by_status(status)
+    return JSONResponse(content=response, status_code=status_code)
+
+
 @app.put("/orders/{order_id}/status")
 async def update_status(order_id: str, payload: UpdateStatusRequest):
     """
@@ -60,8 +66,19 @@ async def update_status(order_id: str, payload: UpdateStatusRequest):
     return JSONResponse(content=response, status_code=status_code)
 
 
+@app.put("/api/v1/kitchen/orders/{order_id}/status")
+async def update_status_kitchen(order_id: str, payload: UpdateStatusRequest):
+    response, status_code = await update_order_status(order_id, payload.status)
+    return JSONResponse(content=response, status_code=status_code)
+
+
 @app.get("/health")
 def health():
+    return {"status": "healthy"}
+
+
+@app.get("/api/v1/kitchen/health")
+def health_kitchen():
     return {"status": "healthy"}
 
 

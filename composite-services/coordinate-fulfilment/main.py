@@ -39,19 +39,19 @@ app.add_middleware(
 
 
 @app.get("/orders")
-async def list_orders(status: str = "pending"):
+async def list_orders(status: str = "pending", kitchen_id: str | None = None):
     """
     Kitchen Dashboard UI calls this to list orders by status.
     e.g. GET /orders?status=cooking
          GET /orders?status=pending
     """
-    response, status_code = await get_orders_by_status(status)
+    response, status_code = await get_orders_by_status(status, kitchen_id=kitchen_id)
     return JSONResponse(content=response, status_code=status_code)
 
 
 @app.get("/api/v1/kitchen/orders")
-async def list_orders_kitchen(status: str = "pending"):
-    response, status_code = await get_orders_by_status(status)
+async def list_orders_kitchen(status: str = "pending", kitchen_id: str | None = None):
+    response, status_code = await get_orders_by_status(status, kitchen_id=kitchen_id)
     return JSONResponse(content=response, status_code=status_code)
 
 

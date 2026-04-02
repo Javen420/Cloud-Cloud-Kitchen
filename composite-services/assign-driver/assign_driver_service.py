@@ -14,11 +14,6 @@ NEW_ORDERS_URL = os.getenv(
 ETA_TRACKING_URL = os.getenv("ETA_TRACKING_URL", "http://eta-tracking:8087")
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 
-DEFAULT_DROPOFF_LAT = 1.3521
-DEFAULT_DROPOFF_LNG = 103.8198
-DEFAULT_KITCHEN_LAT = 1.3350
-DEFAULT_KITCHEN_LNG = 103.8050
-
 RIDER_MAX_RADIUS_KM = float(os.getenv("RIDER_MAX_RADIUS_KM", "5.0"))
 RIDER_BASE_FEE = float(os.getenv("RIDER_BASE_FEE", "3.00"))
 RIDER_PER_KM_RATE = float(os.getenv("RIDER_PER_KM_RATE", "1.50"))
@@ -64,11 +59,11 @@ def _parse_items(raw_items):
     return items if isinstance(items, list) else []
 
 
-def _safe_float(value, fallback: float) -> float:
+def _safe_float(value) -> float | None:
     try:
         return float(value)
     except (TypeError, ValueError):
-        return fallback
+        return None
 
 
 def _safe_kitchen_id(value) -> str | None:
@@ -81,6 +76,11 @@ def _safe_kitchen_id(value) -> str | None:
 
 
 def _normalize_outsystems_order(raw: dict) -> dict:
+    kitchen_lat = _safe_float(raw.get("KitchenLat"))
+    kitchen_lng = _safe_float(raw.get("KitchenLong"))
+    dropoff_lat = _safe_float(raw.get("CLat"))
+    dropoff_lng = _safe_float(raw.get("CLong"))
+
     return {
         "id": str(raw.get("OrderId", "")),
         "user_id": raw.get("CustId", ""),
@@ -91,10 +91,14 @@ def _normalize_outsystems_order(raw: dict) -> dict:
         "kitchen_id": _safe_kitchen_id(raw.get("KitchenId")),
         "kitchen_name": raw.get("KitchenName") or "Cloud Kitchen",
         "kitchen_address": raw.get("KitchenAddress") or "Kitchen address pending",
-        "kitchen_lat": _safe_float(raw.get("KitchenLat"), DEFAULT_KITCHEN_LAT),
-        "kitchen_lng": _safe_float(raw.get("KitchenLong"), DEFAULT_KITCHEN_LNG),
-        "dropoff_lat": _safe_float(raw.get("CLat"), DEFAULT_DROPOFF_LAT),
-        "dropoff_lng": _safe_float(raw.get("CLong"), DEFAULT_DROPOFF_LNG),
+        "kitchen_lat": kitchen_lat,
+        "kitchen_lng": kitchen_lng,
+        "dropoff_lat": dropoff_lat,
+        "dropoff_lng": dropoff_lng,
+        "has_real_coordinates": all(
+            value is not None
+            for value in (kitchen_lat, kitchen_lng, dropoff_lat, dropoff_lng)
+        ),
         "payment_id": raw.get("PaymentId", ""),
     }
 
@@ -134,7 +138,9 @@ async def get_available_orders(
     ready_orders = [
         order
         for order in orders
-        if order["status"] == "finished_cooking" and order["kitchen_id"]
+        if order["status"] == "finished_cooking"
+        and order["kitchen_id"]
+        and order["has_real_coordinates"]
     ]
 
     if rider_lat is not None and rider_lng is not None:
@@ -196,8 +202,15 @@ async def assign_driver(
         }, 409
 
     customer_id = current_order["user_id"]
-    dropoff_lat = dropoff_lat or current_order["dropoff_lat"]
-    dropoff_lng = dropoff_lng or current_order["dropoff_lng"]
+    if dropoff_lat is None:
+        dropoff_lat = current_order["dropoff_lat"]
+    if dropoff_lng is None:
+        dropoff_lng = current_order["dropoff_lng"]
+
+    if not current_order["has_real_coordinates"] or dropoff_lat is None or dropoff_lng is None:
+        return {
+            "error": "Order is missing real pickup/dropoff coordinates and cannot be assigned."
+        }, 409
 
     eta_resp = await http.post(
         f"{ETA_TRACKING_URL}/api/v1/eta/dropoff",
@@ -249,4 +262,53 @@ async def assign_driver(
         "status": "driver_assigned",
         "dropoff_lat": dropoff_lat,
         "dropoff_lng": dropoff_lng,
+    }, 200
+
+
+async def mark_order_delivered(
+    order_id: str,
+    driver_id: str | None = None,
+) -> tuple[dict, int]:
+    current_order = await _get_order(order_id)
+    if not current_order:
+        return {"error": "Order not found."}, 404
+
+    if current_order["status"] not in {"driver_assigned", "out_for_delivery", "delivered"}:
+        return {
+            "error": "Order is not currently out for delivery.",
+            "status": current_order["status"],
+        }, 409
+
+    update_payload = {
+        "KitchenId": str(current_order.get("kitchen_id") or ""),
+        "KitchenLong": str(current_order.get("kitchen_lng") or ""),
+        "KitchenLat": str(current_order.get("kitchen_lat") or ""),
+        "KitchenAddress": current_order.get("kitchen_address") or "",
+        "KitchenAssignStatus": "delivered",
+    }
+
+    status_resp = await http.patch(
+        f"{SANITIZED_NEW_ORDERS_URL}/UpdateKitchenStatus",
+        params={"OrderId": order_id},
+        json=update_payload,
+    )
+    if status_resp.status_code != 200:
+        return {"error": "Failed to update delivered status."}, 502
+
+    await publisher.publish(
+        "order.delivered",
+        {
+            "order_id": order_id,
+            "driver_id": driver_id or "",
+            "customer_id": current_order["user_id"],
+            "status": "delivered",
+            "delivery_address": current_order["delivery_address"],
+            "message": "Your order has been delivered.",
+        },
+    )
+
+    return {
+        "order_id": order_id,
+        "driver_id": driver_id,
+        "status": "delivered",
     }, 200

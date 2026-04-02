@@ -3,6 +3,7 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import RiderLayout from "../components/rider/RiderLayout";
 import ProgressStepper from "../components/rider/ProgressStepper";
 import DetailRow from "../components/rider/DetailRow";
+import RoutePanel from "../components/rider/RoutePanel";
 import { getEtaTracking } from "../services/etaTrackingApi";
 import { getDriverId, getCurrentPosition } from "../lib/driverSession";
 
@@ -16,6 +17,7 @@ export default function PickupPage() {
   const [etaData, setEtaData] = useState(null);
   const [loadingEta, setLoadingEta] = useState(true);
   const [etaError, setEtaError] = useState(null);
+  const [driverCoords, setDriverCoords] = useState(null);
 
   useEffect(() => {
     async function loadEta() {
@@ -24,6 +26,7 @@ export default function PickupPage() {
       try {
         const driverId = getDriverId();
         const { lat, lng } = await getCurrentPosition();
+        setDriverCoords({ lat, lng });
         const data = await getEtaTracking(id, lat, lng, driverId);
         setEtaData(data);
       } catch (err) {
@@ -88,40 +91,20 @@ export default function PickupPage() {
           </div>
         </section>
 
-        <section className="card route-panel">
-          <h3>Route to Pickup</h3>
-          {loadingEta && <p>Loading ETA...</p>}
-          {etaError && <p style={{ color: "orange" }}>ETA unavailable: {etaError}</p>}
-          {etaData && (
-            <div className="completion-summary">
-              <div>
-                <span className="label">ETA to Dropoff</span>
-                <p>{etaLabel}</p>
-              </div>
-              <div>
-                <span className="label">Distance</span>
-                <p>
-                  {etaData.distance_meters != null
-                    ? `${(etaData.distance_meters / 1000).toFixed(1)} km`
-                    : "—"}
-                </p>
-              </div>
-              <div>
-                <span className="label">Source</span>
-                <p>{etaData.source || "—"}</p>
-              </div>
-            </div>
-          )}
-
-          <div className="fake-map">
-            <div className="route-box">
-              <div className="route-point start" />
-              <div className="route-line" />
-              <div className="route-point end" />
-            </div>
-            <p className="map-caption">Map preview placeholder</p>
-          </div>
-        </section>
+        <RoutePanel
+          title="Route to Pickup"
+          eta={loadingEta ? "Calculating..." : etaLabel}
+          from="Current rider location"
+          to={order.pickupAddress}
+          mapFrom={driverCoords ? `${driverCoords.lat},${driverCoords.lng}` : null}
+          mapTo={order.pickupAddress}
+          distanceKm={
+            etaData?.distance_meters != null
+              ? etaData.distance_meters / 1000
+              : null
+          }
+          source={etaError ? `Unavailable: ${etaError}` : etaData?.source}
+        />
       </div>
     </RiderLayout>
   );

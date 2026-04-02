@@ -1,13 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ChefHat,
-  RefreshCw,
-  Wifi,
-  WifiOff,
-  Clock,
-  Package,
-  Sparkles,
-} from "lucide-react";
+import { ChefHat, RefreshCw, Wifi, WifiOff, Clock, Package } from "lucide-react";
 import {
   fetchCoordinateHealth,
   fetchOrdersByStatuses,
@@ -23,8 +15,29 @@ const TABS = [
   { id: "finished_cooking", label: "Ready" },
 ];
 
+const FALLBACK_KITCHEN_ID = import.meta.env.VITE_KITCHEN_ID || null;
+
 function filterAssignedPending(orders) {
   return orders.filter((o) => o.kitchen_id);
+}
+
+function filterByKitchenId(orders, kitchenId) {
+  if (!kitchenId) return orders;
+  return orders.filter((o) => o.kitchen_id === kitchenId);
+}
+
+function collectKitchenOptions(data) {
+  const seen = new Map();
+  for (const status of STATUSES) {
+    for (const order of data[status] || []) {
+      if (!order.kitchen_id || seen.has(order.kitchen_id)) continue;
+      seen.set(order.kitchen_id, {
+        id: order.kitchen_id,
+        label: order.kitchen_address || order.kitchen_name || order.kitchen_id,
+      });
+    }
+  }
+  return Array.from(seen.values()).sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function numericOrderId(id) {
@@ -34,18 +47,18 @@ function numericOrderId(id) {
 }
 
 function formatItems(items) {
-  if (!Array.isArray(items)) return "—";
+  if (!Array.isArray(items)) return "-";
   const line = items
     .map(
       (i) =>
-        `${i.Name || i.name || "Item"} ×${i.Quantity || i.quantity || i.qty || 1}`,
+        `${i.Name || i.name || "Item"} x${i.Quantity || i.quantity || i.qty || 1}`,
     )
     .join(", ");
-  return line.length > 80 ? `${line.slice(0, 77)}…` : line;
+  return line.length > 90 ? `${line.slice(0, 87)}...` : line;
 }
 
 function displayOrderId(id) {
-  if (!id || typeof id !== "string") return "#ORD-—";
+  if (!id || typeof id !== "string") return "#ORD----";
   const compact = id.replace(/-/g, "");
   const tail = compact.slice(-4).toUpperCase();
   return `#ORD-${tail}`;
@@ -54,7 +67,7 @@ function displayOrderId(id) {
 function shortCustomer(userId) {
   if (!userId) return "Customer";
   const part = userId.split("-")[0];
-  return part ? `${part.slice(0, 1).toUpperCase()}${part.slice(1, 8)}…` : "Customer";
+  return part ? `${part.slice(0, 1).toUpperCase()}${part.slice(1, 8)}...` : "Customer";
 }
 
 function relativeAge(iso) {
@@ -76,26 +89,25 @@ function sortByRecent(orders) {
     const ta = new Date(a.updated_at || a.created_at || 0).getTime();
     const tb = new Date(b.updated_at || b.created_at || 0).getTime();
     if (ta !== tb) return tb - ta;
-
     return numericOrderId(b.id) - numericOrderId(a.id);
   });
 }
 
-function badgeForStatus(st) {
-  switch (st) {
+function badgeForStatus(status) {
+  switch (status) {
     case "pending":
-      return "border-amber-500/40 bg-amber-950/50 text-amber-200";
+      return "border-amber-200 bg-amber-50 text-amber-700";
     case "cooking":
-      return "border-emerald-500/40 bg-emerald-950/50 text-emerald-200";
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
     case "finished_cooking":
-      return "border-sky-500/40 bg-sky-950/50 text-sky-200";
+      return "border-sky-200 bg-sky-50 text-sky-700";
     default:
-      return "border-border bg-muted text-muted-foreground";
+      return "border-[hsl(214_24%_88%)] bg-[hsl(214_32%_96%)] text-[hsl(215_16%_42%)]";
   }
 }
 
-function labelForStatus(st) {
-  switch (st) {
+function labelForStatus(status) {
+  switch (status) {
     case "pending":
       return "New";
     case "cooking":
@@ -103,11 +115,9 @@ function labelForStatus(st) {
     case "finished_cooking":
       return "Ready";
     default:
-      return st;
+      return status;
   }
 }
-
-const FALLBACK_KITCHEN_ID = import.meta.env.VITE_KITCHEN_ID || null;
 
 export default function KitchenDashboardPage() {
   const [tab, setTab] = useState("all");
@@ -117,54 +127,60 @@ export default function KitchenDashboardPage() {
     finished_cooking: [],
   });
   const [kitchenId, setKitchenId] = useState(null);
+  const [kitchenOptions, setKitchenOptions] = useState([]);
   const [online, setOnline] = useState(true);
   const [lastSynced, setLastSynced] = useState(null);
   const [statusMsg, setStatusMsg] = useState("");
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
-  const [newOrderPulse, setNewOrderPulse] = useState(false);
   const prevNewCount = useRef(0);
 
   const loadAll = useCallback(async () => {
     setLoading(true);
-    setStatusMsg("Syncing…");
+    setStatusMsg("Syncing...");
     try {
-      const [health, data] = await Promise.all([
+      const [health, firstPass] = await Promise.all([
         fetchCoordinateHealth(),
         fetchOrdersByStatuses(STATUSES),
       ]);
       setOnline(health);
 
-      const pendingK = sortByRecent(filterAssignedPending(data.pending || []));
-      const cooking = sortByRecent(data.cooking || []);
-      const ready = sortByRecent(data.finished_cooking || []);
+      const options = collectKitchenOptions(firstPass);
+      setKitchenOptions(options);
+
+      const selectedKitchenId =
+        kitchenId ||
+        FALLBACK_KITCHEN_ID ||
+        options[0]?.id ||
+        null;
+
+      const data = selectedKitchenId
+        ? await fetchOrdersByStatuses(STATUSES, selectedKitchenId)
+        : firstPass;
+
+      const pending = sortByRecent(
+        filterAssignedPending(filterByKitchenId(data.pending || [], selectedKitchenId)),
+      );
+      const cooking = sortByRecent(
+        filterByKitchenId(data.cooking || [], selectedKitchenId),
+      );
+      const ready = sortByRecent(
+        filterByKitchenId(data.finished_cooking || [], selectedKitchenId),
+      );
 
       setBucket({
-        pending: pendingK,
+        pending,
         cooking,
         finished_cooking: ready,
       });
+      setKitchenId(selectedKitchenId);
 
-      const kid =
-        pendingK[0]?.kitchen_id ||
-        cooking[0]?.kitchen_id ||
-        ready[0]?.kitchen_id ||
-        FALLBACK_KITCHEN_ID ||
-        null;
-      setKitchenId(kid);
-
-      const n = pendingK.length;
-      if (n > prevNewCount.current && prevNewCount.current > 0) {
-        setNewOrderPulse(true);
-        window.setTimeout(() => setNewOrderPulse(false), 4000);
-      }
-      prevNewCount.current = n;
-
+      prevNewCount.current = pending.length;
       setLastSynced(new Date());
       setStatusMsg(
         health
           ? `Last synced ${new Date().toLocaleTimeString()}`
-          : "Service unreachable — showing last data",
+          : "Service unreachable - showing last data",
       );
     } catch (e) {
       setStatusMsg(e.message || "Could not load orders");
@@ -172,15 +188,15 @@ export default function KitchenDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [kitchenId]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
 
   useEffect(() => {
-    const t = window.setInterval(loadAll, 15000);
-    return () => window.clearInterval(t);
+    const timer = window.setInterval(loadAll, 15000);
+    return () => window.clearInterval(timer);
   }, [loadAll]);
 
   const stats = useMemo(
@@ -193,12 +209,10 @@ export default function KitchenDashboardPage() {
   );
 
   const displayOrders = useMemo(() => {
-    const pendingK = bucket.pending;
-    const merged = [...pendingK, ...bucket.cooking, ...bucket.finished_cooking];
+    const merged = [...bucket.pending, ...bucket.cooking, ...bucket.finished_cooking];
     const sorted = sortByRecent(merged);
-
     if (tab === "all") return sorted;
-    if (tab === "pending") return sortByRecent(pendingK);
+    if (tab === "pending") return sortByRecent(bucket.pending);
     if (tab === "cooking") return sortByRecent(bucket.cooking);
     if (tab === "finished_cooking") return sortByRecent(bucket.finished_cooking);
     return sorted;
@@ -223,255 +237,222 @@ export default function KitchenDashboardPage() {
   };
 
   return (
-    <div className="min-h-full bg-[hsl(200_28%_5%)] text-[hsl(200_10%_93%)]">
-      <header className="border-b border-white/10 bg-[hsl(200_25%_8%)]/90 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[hsl(189_85%_44%/0.15)] text-[hsl(189_85%_50%)] ring-1 ring-[hsl(189_85%_44%/0.35)]">
-                <ChefHat className="h-6 w-6" aria-hidden />
+    <div className="min-h-full bg-[hsl(214_32%_97%)] text-[hsl(222_47%_14%)]">
+      <main className="mx-auto max-w-6xl px-6 py-10 sm:px-8 lg:px-10">
+        <header className="mb-8">
+          <p className="mb-2 text-sm font-bold uppercase tracking-[0.14em] text-[hsl(217_91%_48%)]">
+            Kitchen UI
+          </p>
+          <h1 className="text-4xl font-bold tracking-tight text-[hsl(222_47%_14%)]">
+            Kitchen Orders
+          </h1>
+          <p className="mt-3 max-w-3xl text-lg text-[hsl(215_16%_42%)]">
+            Review orders assigned to a selected kitchen and move them through preparation.
+          </p>
+        </header>
+
+        <section className="mb-8 rounded-[1.75rem] bg-[linear-gradient(135deg,hsl(222_47%_22%),hsl(222_47%_30%))] px-7 py-6 text-white shadow-[0_20px_40px_rgba(37,57,108,0.22)]">
+          <div className="grid gap-4 md:grid-cols-[1.25fr_1fr_auto] md:items-end">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/65">
+                Current status
+              </p>
+              <p className="mt-2 text-2xl font-semibold">
+                {online ? "Online and ready to accept jobs" : "Offline / degraded"}
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-white/80">
+                <span className="inline-flex items-center gap-1.5">
+                  <span
+                    className={`h-2.5 w-2.5 rounded-full ${online ? "bg-emerald-400 shadow-[0_0_10px_rgba(34,197,94,0.35)]" : "bg-red-400"}`}
+                    aria-hidden
+                  />
+                  {online ? "Kitchen online" : "Offline / degraded"}
+                </span>
+                <span className="text-white/35">·</span>
+                <span>{lastSyncedLabel}</span>
               </div>
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl">
-                    Kitchen
-                  </h1>
-                  {kitchenId ? (
-                    <span className="rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 font-mono text-xs text-[hsl(200_8%_75%)]">
-                      Kitchen{" "}
-                      {kitchenId.length > 14
-                        ? `${kitchenId.slice(0, 10)}…`
-                        : kitchenId}
-                    </span>
-                  ) : (
-                    <span className="rounded-full border border-amber-500/30 bg-amber-950/40 px-2.5 py-0.5 text-xs text-amber-200/90">
-                      No kitchen id on orders yet
-                    </span>
-                  )}
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[hsl(200_8%_62%)]">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span
-                      className={`h-2 w-2 rounded-full ${online ? "bg-emerald-400 shadow-[0_0_8px_hsl(142_76%_50%)]" : "bg-red-500"}`}
-                      aria-hidden
-                    />
-                    {online ? "Kitchen online" : "Offline / degraded"}
-                  </span>
-                  <span className="text-white/25">·</span>
-                  <span>{lastSyncedLabel}</span>
-                </div>
-              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-white/65">
+                Available jobs
+              </p>
+              <p className="mt-2 text-4xl font-bold tabular-nums text-white">{stats.new}</p>
             </div>
 
             <button
               type="button"
               onClick={() => loadAll()}
               disabled={loading}
-              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 self-start rounded-xl border border-white/15 bg-white/5 px-5 text-sm font-medium text-white transition hover:bg-white/10 disabled:opacity-50"
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-white/20 bg-white text-sm font-semibold text-[hsl(222_47%_22%)] px-6 shadow-[0_10px_24px_rgba(15,23,42,0.08)] transition hover:bg-[hsl(214_32%_96%)] disabled:opacity-50"
             >
-              <RefreshCw
-                className={`h-4 w-4 ${loading ? "animate-spin" : ""}`}
-                aria-hidden
-              />
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden />
               Refresh
             </button>
           </div>
+        </section>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div
-              className={`relative overflow-hidden rounded-2xl border border-white/10 bg-[hsl(200_22%_10%)] p-4 shadow-lg ${newOrderPulse ? "ring-2 ring-amber-400/50" : ""}`}
-            >
-              {stats.new > 0 && (
-                <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
-                  <Sparkles className="h-3 w-3" aria-hidden />
-                  New
-                </span>
-              )}
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[hsl(200_8%_55%)]">
-                New orders
-              </p>
-              <p className="mt-1 text-3xl font-bold tabular-nums text-white">
-                {stats.new}
-              </p>
-              <p className="mt-1 text-xs text-emerald-400/90">
-                {stats.new > 0
-                  ? `Assigned to your kitchen · needs action`
-                  : "None waiting"}
+        <section className="mb-6">
+          {kitchenOptions.length > 0 && (
+            <div className="max-w-lg">
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(215_16%_42%)]">
+                Active Kitchen
+              </label>
+              <select
+                value={kitchenId || ""}
+                onChange={(e) => setKitchenId(e.target.value || null)}
+                className="w-full rounded-2xl border border-[hsl(214_24%_88%)] bg-white px-4 py-3 text-sm font-medium text-[hsl(222_47%_18%)] outline-none shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition focus:border-[hsl(217_91%_48%)]"
+              >
+                {kitchenOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </section>
+
+        <section>
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-2xl font-semibold text-[hsl(222_47%_14%)]">
+                Incoming orders
+              </h2>
+              <p className="mt-1 text-base text-[hsl(215_16%_42%)]">
+                Orders assigned to your kitchen · <span className="text-[hsl(222_47%_22%)]">{statusMsg}</span>
               </p>
             </div>
-
-            <div className="rounded-2xl border border-white/10 bg-[hsl(200_22%_10%)] p-4 shadow-lg">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[hsl(200_8%_55%)]">
-                In progress
-              </p>
-              <p className="mt-1 text-3xl font-bold tabular-nums text-white">
-                {stats.preparing}
-              </p>
-              <p className="mt-1 text-xs text-[hsl(200_8%_55%)]">
-                {stats.ready > 0
-                  ? `${stats.ready} ready for pickup`
-                  : "Prep active orders below"}
-              </p>
+            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filter orders">
+              {TABS.map((t) => {
+                const active = tab === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setTab(t.id)}
+                    className={`rounded-full border px-4 py-2 text-sm font-medium transition ${
+                      active
+                        ? "border-[hsl(217_91%_48%)] bg-[hsl(217_91%_48%/0.08)] text-[hsl(222_47%_22%)]"
+                        : "border-[hsl(214_24%_88%)] bg-white text-[hsl(215_16%_42%)] hover:border-[hsl(217_91%_48%/0.35)] hover:text-[hsl(222_47%_22%)]"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
-        </div>
-      </header>
 
-      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-white">
-              Incoming orders
-            </h2>
-            <p className="text-sm text-[hsl(200_8%_55%)]">
-              Orders assigned to your kitchen ·{" "}
-              <span className="text-[hsl(200_8%_70%)]">{statusMsg}</span>
-            </p>
-          </div>
-          <div
-            className="flex flex-wrap gap-2"
-            role="tablist"
-            aria-label="Filter orders"
-          >
-            {TABS.map((t) => {
-              const active = tab === t.id;
-              return (
-                <button
-                  key={t.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setTab(t.id)}
-                  className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition ${
-                    active
-                      ? "border-[hsl(189_85%_44%/0.5)] bg-[hsl(189_85%_44%/0.2)] text-white shadow-inner"
-                      : "border-white/15 bg-transparent text-[hsl(200_8%_62%)] hover:border-white/25 hover:text-white"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+          {loading && displayOrders.length === 0 ? (
+            <div className="rounded-[1.75rem] border border-[hsl(214_24%_88%)] bg-white py-16 text-center text-[hsl(215_16%_42%)] shadow-[0_12px_32px_rgba(15,23,42,0.06)]">
+              Loading orders...
+            </div>
+          ) : displayOrders.length === 0 ? (
+            <div className="rounded-[1.75rem] border-2 border-dashed border-[hsl(214_24%_88%)] bg-white py-16 text-center shadow-[0_12px_32px_rgba(15,23,42,0.04)]">
+              <Package className="mx-auto h-10 w-10 text-[hsl(214_24%_78%)]" aria-hidden />
+              <p className="mt-3 text-sm text-[hsl(215_16%_42%)]">
+                No orders in this view.
+              </p>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-5">
+              {displayOrders.map((order) => {
+                const status = order.status;
+                const busy = updatingId === order.id;
+                const addr = order.delivery_address || order.dropoff_address || "-";
+                const when = relativeAge(order.updated_at || order.created_at);
+                const total = ((order.total_amount || 0) / 100).toFixed(2);
 
-        {loading && displayOrders.length === 0 ? (
-          <div className="rounded-2xl border border-white/10 bg-[hsl(200_22%_10%)] py-16 text-center text-[hsl(200_8%_55%)]">
-            Loading orders…
-          </div>
-        ) : displayOrders.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/15 bg-[hsl(200_22%_9%)] py-16 text-center">
-            <Package className="mx-auto h-10 w-10 text-white/20" aria-hidden />
-            <p className="mt-3 text-sm text-[hsl(200_8%_55%)]">
-              No orders in this view.
-            </p>
-          </div>
-        ) : (
-          <ul className="flex flex-col gap-3">
-            {displayOrders.map((order) => {
-              const st = order.status;
-              const busy = updatingId === order.id;
-              const addr =
-                order.delivery_address || order.dropoff_address || "—";
-              const when = relativeAge(
-                order.updated_at || order.created_at,
-              );
-              const total = ((order.total_amount || 0) / 100).toFixed(2);
-
-              return (
-                <li
-                  key={order.id}
-                  className="rounded-2xl border border-white/10 bg-[hsl(200_22%_10%)] p-4 shadow-md transition hover:border-white/15"
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-white">
-                          {displayOrderId(order.id)}
-                        </span>
-                        <span
-                          className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${badgeForStatus(st)}`}
-                        >
-                          {labelForStatus(st)}
-                        </span>
+                return (
+                  <li
+                    key={order.id}
+                    className="rounded-[1.75rem] border border-[hsl(214_24%_88%)] bg-white p-6 shadow-[0_14px_36px_rgba(15,23,42,0.06)] transition hover:shadow-[0_18px_40px_rgba(15,23,42,0.08)]"
+                  >
+                    <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-mono text-base font-semibold text-[hsl(222_47%_14%)]">
+                            {displayOrderId(order.id)}
+                          </span>
+                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badgeForStatus(status)}`}>
+                            {labelForStatus(status)}
+                          </span>
+                        </div>
+                        <p className="mt-4 text-2xl font-semibold leading-tight text-[hsl(222_47%_18%)]">
+                          {formatItems(order.items)}
+                        </p>
+                        <p className="mt-2 text-base text-[hsl(215_16%_42%)]">
+                          {shortCustomer(order.user_id)} · {addr}
+                          {when ? ` · ${when}` : ""}
+                        </p>
+                        <p className="mt-2 text-base font-medium text-[hsl(215_16%_42%)]">
+                          Total ${total}
+                        </p>
                       </div>
-                      <p className="mt-2 text-sm font-medium text-white">
-                        {formatItems(order.items)}
-                      </p>
-                      <p className="mt-1 text-xs text-[hsl(200_8%_55%)]">
-                        {shortCustomer(order.user_id)} · {addr}
-                        {when ? ` · ${when}` : ""}
-                      </p>
-                      <p className="mt-1 text-xs text-[hsl(200_8%_45%)]">
-                        Total ${total}
-                      </p>
-                    </div>
 
-                    <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                      {st === "pending" && (
-                        <button
-                          type="button"
-                          disabled={busy || !order.kitchen_id}
-                          onClick={() => onAdvance(order.id, "cooking")}
-                          title={
-                            !order.kitchen_id
-                              ? "Wait for kitchen assignment"
-                              : "Start preparing"
-                          }
-                          className="inline-flex min-h-[40px] min-w-[120px] items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-lg shadow-emerald-900/30 transition hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          Accept
-                        </button>
-                      )}
+                      <div className="flex shrink-0 flex-wrap items-center gap-3 lg:justify-end">
+                        {status === "pending" && (
+                          <button
+                            type="button"
+                            disabled={busy || !order.kitchen_id}
+                            onClick={() => onAdvance(order.id, "cooking")}
+                            title={!order.kitchen_id ? "Wait for kitchen assignment" : "Start preparing"}
+                            className="inline-flex min-h-[48px] min-w-[150px] items-center justify-center rounded-2xl bg-[hsl(222_47%_22%)] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,57,108,0.22)] transition hover:bg-[hsl(222_47%_28%)] disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Accept
+                          </button>
+                        )}
 
-                      {st === "cooking" && (
-                        <>
+                        {status === "cooking" && (
+                          <>
+                            <button
+                              type="button"
+                              disabled
+                              className="inline-flex items-center gap-1.5 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700"
+                            >
+                              <Clock className="h-3.5 w-3.5" aria-hidden />
+                              Preparing
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy}
+                              onClick={() => onAdvance(order.id, "finished_cooking")}
+                              className="inline-flex min-h-[48px] min-w-[150px] items-center justify-center rounded-2xl bg-[hsl(222_47%_22%)] px-5 text-sm font-semibold text-white shadow-[0_10px_24px_rgba(37,57,108,0.22)] transition hover:bg-[hsl(222_47%_28%)] disabled:opacity-50"
+                            >
+                              Ready
+                            </button>
+                          </>
+                        )}
+
+                        {status === "finished_cooking" && (
                           <button
                             type="button"
                             disabled
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-amber-600/50 bg-amber-950/40 px-3 py-2 text-xs font-medium text-amber-200/90"
+                            className="inline-flex min-h-[48px] min-w-[170px] cursor-default items-center justify-center rounded-2xl border border-[hsl(214_24%_88%)] bg-[hsl(214_32%_96%)] px-5 text-sm font-medium text-[hsl(215_16%_42%)]"
                           >
-                            <Clock className="h-3.5 w-3.5" aria-hidden />
-                            Preparing
+                            Awaiting pickup
                           </button>
-                          <button
-                            type="button"
-                            disabled={busy}
-                            onClick={() =>
-                              onAdvance(order.id, "finished_cooking")
-                            }
-                            className="inline-flex min-h-[40px] min-w-[120px] items-center justify-center rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-lg shadow-emerald-900/30 transition hover:bg-emerald-500 disabled:opacity-50"
-                          >
-                            Ready
-                          </button>
-                        </>
-                      )}
-
-                      {st === "finished_cooking" && (
-                        <button
-                          type="button"
-                          disabled
-                          className="inline-flex min-h-[40px] min-w-[140px] cursor-default items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-[hsl(200_8%_55%)]"
-                        >
-                          Awaiting pickup
-                        </button>
-                      )}
+                        )}
+                      </div>
                     </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-
-        <p className="mt-8 flex items-center justify-center gap-2 text-center text-[11px] text-[hsl(200_8%_40%)]">
-          {online ? (
-            <Wifi className="h-3.5 w-3.5" aria-hidden />
-          ) : (
-            <WifiOff className="h-3.5 w-3.5 text-amber-400" aria-hidden />
+                  </li>
+                );
+              })}
+            </ul>
           )}
-          Coordinate fulfilment · orders sync every 15s
-        </p>
+
+          <p className="mt-10 flex items-center justify-center gap-2 text-center text-xs text-[hsl(215_16%_42%)]">
+            {online ? (
+              <Wifi className="h-3.5 w-3.5 text-[hsl(217_91%_48%)]" aria-hidden />
+            ) : (
+              <WifiOff className="h-3.5 w-3.5 text-amber-500" aria-hidden />
+            )}
+            Coordinate fulfilment · orders sync every 15s
+          </p>
+        </section>
       </main>
     </div>
   );

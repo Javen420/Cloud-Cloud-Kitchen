@@ -68,10 +68,12 @@ async def poll_cooking_orders():
         print(f"[coordinate-fulfilment] {len(cooking_orders)} order(s) currently cooking.")
 
 
-async def get_orders_by_status(status: str) -> tuple[dict, int]:
+async def get_orders_by_status(status: str, kitchen_id: str | None = None) -> tuple[dict, int]:
     async with aiohttp.ClientSession() as session:
         orders = await _get_all_orders(session)
         filtered = [o for o in orders if o["status"] == status]
+        if kitchen_id:
+            filtered = [o for o in filtered if str(o.get("kitchen_id") or "") == kitchen_id]
         return {"orders": filtered}, 200
 
 

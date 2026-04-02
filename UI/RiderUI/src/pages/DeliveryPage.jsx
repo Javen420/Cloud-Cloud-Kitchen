@@ -5,6 +5,7 @@ import ProgressStepper from "../components/rider/ProgressStepper";
 import DetailRow from "../components/rider/DetailRow";
 import RoutePanel from "../components/rider/RoutePanel";
 import { getEtaTracking } from "../services/etaTrackingApi";
+import { markDelivered } from "../services/riderApi";
 import { getDriverId, getCurrentPosition } from "../lib/driverSession";
 
 export default function DeliveryPage() {
@@ -17,6 +18,8 @@ export default function DeliveryPage() {
   const [etaData, setEtaData] = useState(null);
   const [loadingEta, setLoadingEta] = useState(true);
   const [etaError, setEtaError] = useState(null);
+  const [completing, setCompleting] = useState(false);
+  const [completeError, setCompleteError] = useState(null);
 
   useEffect(() => {
     async function loadEta() {
@@ -59,6 +62,22 @@ export default function DeliveryPage() {
       ? "Calculating..."
       : "Unavailable";
 
+  async function handleConfirmDelivered() {
+    setCompleting(true);
+    setCompleteError(null);
+    try {
+      await markDelivered({
+        orderId: order.id,
+        driverId: getDriverId(),
+      });
+      navigate(`/rider/completed/${order.id}`, { state: { order } });
+    } catch (err) {
+      setCompleteError(err.message);
+    } finally {
+      setCompleting(false);
+    }
+  }
+
   return (
     <RiderLayout
       title={`On Delivery - ${order.id}`}
@@ -83,18 +102,26 @@ export default function DeliveryPage() {
             </p>
           )}
 
+          {completeError && (
+            <p style={{ color: "red", fontSize: "0.85rem" }}>
+              Delivery update error: {completeError}
+            </p>
+          )}
+
           <div className="action-row">
             <button
               className="secondary-btn"
               onClick={() => navigate(`/rider/pickup/${order.id}`, { state: { order } })}
+              disabled={completing}
             >
               Back
             </button>
             <button
               className="primary-btn"
-              onClick={() => navigate(`/rider/completed/${order.id}`, { state: { order } })}
+              onClick={handleConfirmDelivered}
+              disabled={completing}
             >
-              Confirm Delivered
+              {completing ? "Completing..." : "Confirm Delivered"}
             </button>
           </div>
         </section>
@@ -104,6 +131,14 @@ export default function DeliveryPage() {
           eta={etaLabel}
           from={order.pickupAddress}
           to={order.dropoffAddress}
+          mapFrom={order.pickupAddress}
+          mapTo={order.dropoffAddress}
+          distanceKm={
+            etaData?.distance_meters != null
+              ? etaData.distance_meters / 1000
+              : null
+          }
+          source={etaError ? `Unavailable: ${etaError}` : etaData?.source}
         />
       </div>
     </RiderLayout>

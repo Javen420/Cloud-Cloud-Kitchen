@@ -15,10 +15,6 @@ export function haversineKm(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-/** When Supabase has no dropoff_lat/lng, use a Singapore centroid so assign + ETA still work. */
-const DEFAULT_DROPOFF_LAT = 1.3521;
-const DEFAULT_DROPOFF_LNG = 103.8198;
-
 /**
  * Transforms a normalized order from assign-driver CS into the shape
  * expected by all RiderUI components.
@@ -57,8 +53,8 @@ function normalizeOrder(raw) {
     items: itemCount,
     itemsList,
     orderCode: (raw.id || "").slice(-4).toUpperCase() || "----",
-    dropoff_lat: raw.dropoff_lat ?? DEFAULT_DROPOFF_LAT,
-    dropoff_lng: raw.dropoff_lng ?? DEFAULT_DROPOFF_LNG,
+    dropoff_lat: raw.dropoff_lat ?? null,
+    dropoff_lng: raw.dropoff_lng ?? null,
     kitchen_lat: raw.kitchen_lat ?? null,
     kitchen_lng: raw.kitchen_lng ?? null,
     status: raw.status,
@@ -89,8 +85,6 @@ export async function getAvailableOrders(riderLat, riderLng) {
  * Also triggers dropoff caching in ETA Tracking.
  */
 export async function assignDriver({ orderId, driverId, driverLat, driverLng, dropoffLat, dropoffLng }) {
-  const lat = dropoffLat ?? DEFAULT_DROPOFF_LAT;
-  const lng = dropoffLng ?? DEFAULT_DROPOFF_LNG;
   const resp = await fetch(`${BASE_URL}/api/v1/driver/assign`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -99,8 +93,8 @@ export async function assignDriver({ orderId, driverId, driverLat, driverLng, dr
       driver_id: driverId,
       driver_lat: driverLat,
       driver_lng: driverLng,
-      dropoff_lat: lat,
-      dropoff_lng: lng,
+      dropoff_lat: dropoffLat,
+      dropoff_lng: dropoffLng,
     }),
   });
   if (!resp.ok) {
@@ -111,5 +105,27 @@ export async function assignDriver({ orderId, driverId, driverLat, driverLng, dr
       `Assignment failed (${resp.status})`;
     throw new Error(msg);
   }
+  return resp.json();
+}
+
+export async function markDelivered({ orderId, driverId }) {
+  const resp = await fetch(`${BASE_URL}/api/v1/driver/deliver`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      order_id: orderId,
+      driver_id: driverId,
+    }),
+  });
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}));
+    const msg =
+      err.error ||
+      (typeof err.detail === "string" ? err.detail : err.detail?.message) ||
+      `Delivery update failed (${resp.status})`;
+    throw new Error(msg);
+  }
+
   return resp.json();
 }

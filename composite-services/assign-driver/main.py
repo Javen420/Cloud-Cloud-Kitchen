@@ -6,8 +6,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from shared.AMQP_Publisher import AMQPPublisher
-from assign_driver_service import publisher, get_available_orders, assign_driver
-from schemas import AssignDriverRequest
+from assign_driver_service import (
+    publisher,
+    get_available_orders,
+    assign_driver,
+    mark_order_delivered,
+)
+from schemas import AssignDriverRequest, DeliverOrderRequest
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 
@@ -50,6 +55,15 @@ async def assign(payload: AssignDriverRequest):
         driver_lng=payload.driver_lng,
         dropoff_lat=payload.dropoff_lat,
         dropoff_lng=payload.dropoff_lng,
+    )
+    return JSONResponse(content=response, status_code=status_code)
+
+
+@app.put("/api/v1/driver/deliver")
+async def deliver(payload: DeliverOrderRequest):
+    response, status_code = await mark_order_delivered(
+        order_id=payload.order_id,
+        driver_id=payload.driver_id,
     )
     return JSONResponse(content=response, status_code=status_code)
 

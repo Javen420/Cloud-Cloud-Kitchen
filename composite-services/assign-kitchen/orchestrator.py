@@ -148,7 +148,7 @@ async def poll_and_assign():
                         "KitchenAddress": str(assign_body["kitchen_address"]),
                     }
 
-                    async with session.post(
+                    async with session.put(
                         f"{SANITIZED_NEW_ORDERS_URL}/UpdateFullOrder",
                         json=full_order_payload,
                     ) as full_resp:

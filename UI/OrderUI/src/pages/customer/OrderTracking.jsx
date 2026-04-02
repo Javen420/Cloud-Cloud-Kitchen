@@ -185,6 +185,7 @@ export default function OrderTracking() {
                       const Icon = step.icon;
                       const isDone = currentStepIndex >= 0 && index <= currentStepIndex;
                       const isCurrent = index === currentStepIndex;
+                      const showInProgress = isCurrent && order.status !== "delivered";
                       return (
                         <li key={step.key} className="relative flex gap-4 pb-8 last:pb-0">
                           <div
@@ -192,7 +193,7 @@ export default function OrderTracking() {
                               isDone
                                 ? "border-primary bg-primary text-primary-foreground shadow-md shadow-primary/20"
                                 : "border-border bg-muted/50 text-muted-foreground"
-                            } ${isCurrent ? "ring-4 ring-primary/15 scale-105" : ""}`}
+                            } ${showInProgress ? "ring-4 ring-primary/15 scale-105" : ""}`}
                           >
                             <Icon className="w-5 h-5" />
                           </div>
@@ -204,7 +205,7 @@ export default function OrderTracking() {
                             >
                               {step.label}
                             </p>
-                            {isCurrent && (
+                            {showInProgress && (
                               <p className="text-xs text-primary mt-1 flex items-center gap-1.5">
                                 <Clock className="w-3.5 h-3.5 shrink-0" />
                                 In progress…

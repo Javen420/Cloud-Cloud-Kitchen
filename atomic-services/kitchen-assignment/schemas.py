@@ -29,5 +29,7 @@ class AssignmentResponse(BaseModel):
     kitchen_id: str
     kitchen_name: str
     kitchen_address: str
+    customer_lat: float
+    customer_lng: float
     distance_meters: float
     duration_seconds: float

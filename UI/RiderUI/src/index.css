@@ -1,39 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
 * {
   box-sizing: border-box;
 }
 
 :root {
-  --bg: #f4f7fb;
-  --card: #ffffff;
-  --text: #111827;
-  --muted: #7b7f85;
-  --border: #e5e7eb;
-  --primary: #111827;
-  --secondary: #eef2f7;
-  --tertiary: #dcc8c8;
-  --accent: #0f766e;
-  --success: #16a34a;
-  --success-soft: #dcfce7;
-  --shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+  /* Match OrderUI navy-blue theme tokens (HSL) */
+  --background: hsl(214 32% 97%);
+  --foreground: hsl(222 47% 14%);
+
+  --card: hsl(0 0% 100%);
+  --card-foreground: hsl(222 47% 14%);
+
+  --primary: hsl(222 47% 22%);
+  --primary-foreground: hsl(210 40% 98%);
+
+  --secondary: hsl(214 32% 92%);
+  --secondary-foreground: hsl(222 47% 18%);
+
+  --muted: hsl(214 24% 93%);
+  --muted-foreground: hsl(215 16% 42%);
+
+  --accent: hsl(217 91% 48%);
+  --accent-foreground: hsl(0 0% 100%);
+
+  --destructive: hsl(0 84% 58%);
+
+  --border: hsl(214 24% 88%);
+  --input: hsl(214 28% 94%);
+  --ring: hsl(222 55% 38%);
+
+  --success: hsl(142 71% 37%);
+  --success-soft: hsl(138 76% 93%);
+
+  --radius: 1rem;
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.08), 0 12px 30px rgba(15, 23, 42, 0.06);
+}
+
+html, body, #root {
+  height: 100%;
 }
 
 body {
   margin: 0;
-  font-family: Inter, Arial, sans-serif;
-  background: var(--bg);
-  color: var(--text);
+  font-family: 'Plus Jakarta Sans', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Outfit', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
 }
 
 button {
   font: inherit;
   cursor: pointer;
   border: none;
-  transition: 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 button:hover {
   opacity: 0.95;
 }
+
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: var(--background); }
+::-webkit-scrollbar-thumb { background: var(--muted); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border); }
+
+/* ── Page shell ─────────────────────────────────────────────────────── */
 
 .page-shell {
   max-width: 1180px;
@@ -57,24 +98,30 @@ button:hover {
 .page-header h1 {
   margin: 0 0 8px;
   font-size: 2rem;
+  color: var(--foreground);
 }
 
 .page-subtitle {
   margin: 0;
-  color: var(--muted);
+  color: var(--muted-foreground);
   max-width: 720px;
+  font-size: 0.95rem;
+  line-height: 1.6;
 }
+
+/* ── Summary banner ─────────────────────────────────────────────────── */
 
 .summary-banner {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 16px;
-  background: linear-gradient(135deg, #0f766e, #155e75);
-  color: white;
-  border-radius: 20px;
-  padding: 20px 22px;
-  margin-bottom: 22px;
-  box-shadow: var(--shadow);
+  background: linear-gradient(135deg, var(--primary), hsl(222 47% 30%));
+  color: var(--primary-foreground);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-md);
 }
 
 .summary-banner p {
@@ -83,17 +130,27 @@ button:hover {
   font-weight: 600;
 }
 
+/* ── Card grid ──────────────────────────────────────────────────────── */
+
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
   gap: 18px;
 }
 
+/* ── Card ────────────────────────────────────────────────────────────── */
+
 .card {
   background: var(--card);
-  border-radius: 22px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
   padding: 20px;
   box-shadow: var(--shadow);
+  transition: box-shadow 0.2s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-md);
 }
 
 .order-list-card h3,
@@ -111,41 +168,52 @@ button:hover {
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--muted-foreground);
   margin: 4px 0 0;
+  font-size: 0.875rem;
 }
+
+/* ── Badges ──────────────────────────────────────────────────────────── */
 
 .price-pill,
 .eta-badge {
   background: var(--success-soft);
   color: var(--success);
-  padding: 10px 14px;
+  padding: 8px 14px;
   border-radius: 999px;
   font-weight: 700;
   white-space: nowrap;
+  font-size: 0.9rem;
 }
+
+/* ── Labels ──────────────────────────────────────────────────────────── */
 
 .label {
   display: block;
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: var(--muted-foreground);
   margin-bottom: 6px;
+  font-weight: 500;
 }
 
 .middlebar {
   display: block;
-  font-size: 0.76rem;
+  font-size: 0.75rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--tertiary);
+  color: hsla(210, 40%, 98%, 0.7);
   margin-bottom: 6px;
+  font-weight: 500;
 }
+
+/* ── Order info grid ─────────────────────────────────────────────────── */
 
 .order-info-grid {
   display: grid;
-  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
   margin-bottom: 18px;
 }
 
@@ -153,30 +221,62 @@ button:hover {
 .route-addresses p,
 .completion-summary p {
   margin: 0;
+  font-size: 0.9rem;
 }
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
 
 .primary-btn,
 .secondary-btn {
-  padding: 13px 18px;
-  border-radius: 14px;
+  padding: 12px 18px;
+  border-radius: 0.75rem;
   font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
 }
 
 .primary-btn {
   width: 100%;
   background: var(--primary);
-  color: white;
+  color: var(--primary-foreground);
+  box-shadow: 0 2px 8px hsla(222, 47%, 22%, 0.2);
+}
+
+.primary-btn:hover {
+  opacity: 0.95;
+  box-shadow: 0 4px 12px hsla(222, 47%, 22%, 0.25);
+}
+
+.primary-btn:active {
+  transform: scale(0.99);
+}
+
+.primary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .secondary-btn {
   background: var(--secondary);
-  color: var(--text);
+  color: var(--secondary-foreground);
+  border: 1px solid var(--border);
 }
+
+.secondary-btn:hover {
+  border-color: hsla(222, 47%, 22%, 0.15);
+}
+
+.secondary-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Details card ────────────────────────────────────────────────────── */
 
 .details-card {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
 }
 
 .detail-row {
@@ -185,15 +285,20 @@ button:hover {
   gap: 16px;
   padding: 14px 0;
   border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
 }
 
 .detail-label {
-  color: var(--muted);
+  color: var(--muted-foreground);
+  font-weight: 500;
 }
 
 .detail-value {
   text-align: right;
+  font-weight: 500;
 }
+
+/* ── Action row ──────────────────────────────────────────────────────── */
 
 .action-row {
   display: flex;
@@ -201,9 +306,11 @@ button:hover {
   margin-top: 24px;
 }
 
-.action-row>* {
+.action-row > * {
   flex: 1;
 }
+
+/* ── Progress stepper ────────────────────────────────────────────────── */
 
 .progress-stepper {
   display: flex;
@@ -216,24 +323,27 @@ button:hover {
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #9ca3af;
+  color: var(--muted-foreground);
   font-weight: 600;
+  font-size: 0.875rem;
 }
 
 .step-item.active {
-  color: var(--text);
+  color: var(--foreground);
 }
 
 .step-dot {
   width: 12px;
   height: 12px;
   border-radius: 999px;
-  background: #d1d5db;
+  background: var(--muted);
 }
 
 .step-item.active .step-dot {
   background: var(--success);
 }
+
+/* ── Two-column layout ───────────────────────────────────────────────── */
 
 .two-column-layout {
   display: grid;
@@ -241,6 +351,8 @@ button:hover {
   gap: 18px;
   align-items: start;
 }
+
+/* ── Route panel / fake map ──────────────────────────────────────────── */
 
 .route-header {
   display: flex;
@@ -252,11 +364,11 @@ button:hover {
 
 .fake-map {
   height: 260px;
-  border-radius: 20px;
+  border-radius: var(--radius);
   background:
     linear-gradient(90deg, rgba(255, 255, 255, 0.4) 49%, transparent 50%, transparent 51%, rgba(255, 255, 255, 0.4) 52%),
     linear-gradient(rgba(255, 255, 255, 0.4) 49%, transparent 50%, transparent 51%, rgba(255, 255, 255, 0.4) 52%),
-    linear-gradient(135deg, #dbeafe, #cffafe);
+    linear-gradient(135deg, hsl(214 80% 92%), hsl(189 80% 92%));
   background-size: 120px 120px, 120px 120px, auto;
   display: flex;
   flex-direction: column;
@@ -265,6 +377,7 @@ button:hover {
   margin-bottom: 18px;
   position: relative;
   overflow: hidden;
+  border: 1px solid var(--border);
 }
 
 .route-box {
@@ -281,31 +394,34 @@ button:hover {
 }
 
 .route-point.start {
-  background: #2563eb;
+  background: var(--accent);
 }
 
 .route-point.end {
-  background: #ef4444;
+  background: var(--destructive);
 }
 
 .route-line {
   width: 4px;
   height: 100px;
-  background: #111827;
+  background: var(--foreground);
   border-radius: 999px;
   margin: 8px 0;
 }
 
 .map-caption {
   margin-top: 16px;
-  color: var(--muted);
+  color: var(--muted-foreground);
   font-weight: 600;
+  font-size: 0.875rem;
 }
 
 .route-addresses {
   display: grid;
   gap: 14px;
 }
+
+/* ── Success / completion ────────────────────────────────────────────── */
 
 .success-card {
   text-align: center;
@@ -329,15 +445,23 @@ button:hover {
   display: grid;
   gap: 16px;
   text-align: left;
-  background: #f8fafc;
-  border-radius: 18px;
+  background: var(--input);
+  border-radius: 0.75rem;
   padding: 18px;
   margin: 22px 0;
+  border: 1px solid var(--border);
 }
+
+/* ── Empty state ─────────────────────────────────────────────────────── */
 
 .empty-card {
   text-align: center;
+  border: 2px dashed var(--border);
+  background: hsla(214, 32%, 97%, 0.5);
+  color: var(--muted-foreground);
 }
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
 
 @media (max-width: 900px) {
   .two-column-layout {
@@ -346,6 +470,7 @@ button:hover {
 
   .summary-banner {
     flex-direction: column;
+    align-items: flex-start;
   }
 }
 
@@ -356,5 +481,9 @@ button:hover {
 
   .action-row {
     flex-direction: column;
+  }
+
+  .order-info-grid {
+    grid-template-columns: 1fr;
   }
 }

@@ -22,18 +22,30 @@ const DEFAULT_DROPOFF_LNG = 103.8198;
 /**
  * Transforms a normalized order from assign-driver CS into the shape
  * expected by all RiderUI components.
+ *
+ * When the server supplies pickup_distance_km / delivery_distance_km / payout
+ * (i.e. rider coords were sent), those values are used directly.
+ * Otherwise falls back to the legacy 10%-of-total calculation.
  */
 function normalizeOrder(raw) {
-  const itemCount = Array.isArray(raw.items) ? raw.items.length : 0;
-  const totalCents = raw.total_amount || 0;
-  const payoutDollars = parseFloat(((totalCents * 0.1) / 100).toFixed(2));
+  const itemsList = Array.isArray(raw.items) ? raw.items : [];
+  const itemCount = itemsList.length;
+
+  // Prefer server-calculated payout; fall back to legacy 10% model
+  const serverPayout = raw.payout;
+  const legacyPayout = (() => {
+    const totalCents = raw.total_amount || 0;
+    const p = parseFloat(((totalCents * 0.1) / 100).toFixed(2));
+    return p > 0 ? p : 4.99;
+  })();
 
   return {
     id: raw.id,
     paymentStatus: "SUCCESS",
     riderEligible: raw.status === "pending",
-    payout: payoutDollars > 0 ? payoutDollars : 4.99,
-    distanceFromRider: "Calculating...",
+    payout: serverPayout != null ? serverPayout : legacyPayout,
+    pickupDistanceKm: raw.pickup_distance_km ?? null,
+    deliveryDistanceKm: raw.delivery_distance_km ?? null,
     etaToPickup: "Calculating...",
     etaToCustomer: "Calculating...",
     totalEta: "Calculating...",
@@ -43,18 +55,28 @@ function normalizeOrder(raw) {
     dropoffAddress: raw.delivery_address || "Address unavailable",
     customerName: raw.user_id ? raw.user_id.slice(0, 8) : "Customer",
     items: itemCount,
+    itemsList,
     orderCode: (raw.id || "").slice(-4).toUpperCase() || "----",
     dropoff_lat: raw.dropoff_lat ?? DEFAULT_DROPOFF_LAT,
     dropoff_lng: raw.dropoff_lng ?? DEFAULT_DROPOFF_LNG,
+    kitchen_lat: raw.kitchen_lat ?? null,
+    kitchen_lng: raw.kitchen_lng ?? null,
     status: raw.status,
   };
 }
 
 /**
  * Fetches all pending (driver-unassigned) orders via the Assign Driver CS.
+ * When riderLat / riderLng are provided the server filters by radius and
+ * returns distance + payout fields.
  */
-export async function getAvailableOrders() {
-  const resp = await fetch(`${BASE_URL}/api/v1/driver/orders`);
+export async function getAvailableOrders(riderLat, riderLng) {
+  const params = new URLSearchParams();
+  if (riderLat != null) params.set("rider_lat", riderLat);
+  if (riderLng != null) params.set("rider_lng", riderLng);
+  const qs = params.toString();
+  const url = `${BASE_URL}/api/v1/driver/orders${qs ? `?${qs}` : ""}`;
+  const resp = await fetch(url);
   if (!resp.ok) {
     throw new Error(`Failed to fetch available orders (${resp.status})`);
   }

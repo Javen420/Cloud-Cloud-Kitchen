@@ -5,8 +5,11 @@
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 const KITCHEN_API = `${BASE_URL}/api/v1/kitchen`;
 
-export async function fetchOrdersByStatus(status) {
-  const res = await fetch(`${KITCHEN_API}/orders?status=${encodeURIComponent(status)}`);
+export async function fetchOrdersByStatus(status, kitchenId = null) {
+  const params = new URLSearchParams({ status });
+  if (kitchenId) params.set("kitchen_id", kitchenId);
+
+  const res = await fetch(`${KITCHEN_API}/orders?${params.toString()}`);
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data.error || res.statusText || "Failed to load orders");
@@ -37,10 +40,8 @@ export async function fetchCoordinateHealth() {
   }
 }
 
-/** Load several statuses in parallel (for dashboard stats + “All” tab). */
-export async function fetchOrdersByStatuses(statuses) {
-  const lists = await Promise.all(
-    statuses.map((s) => fetchOrdersByStatus(s)),
-  );
+/** Load several statuses in parallel (for dashboard stats + "All" tab). */
+export async function fetchOrdersByStatuses(statuses, kitchenId = null) {
+  const lists = await Promise.all(statuses.map((s) => fetchOrdersByStatus(s, kitchenId)));
   return Object.fromEntries(statuses.map((s, i) => [s, lists[i]]));
 }

@@ -10,3 +10,8 @@ class AssignDriverRequest(BaseModel):
     # Caller may supply dropoff coords when the DB record lacks them
     dropoff_lat: Optional[float] = None
     dropoff_lng: Optional[float] = None
+
+
+class DeliverOrderRequest(BaseModel):
+    order_id: str
+    driver_id: Optional[str] = None

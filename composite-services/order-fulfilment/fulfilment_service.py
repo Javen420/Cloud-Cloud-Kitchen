@@ -1,9 +1,13 @@
 import os
 import uuid
 import json
+import math
 import httpx
+from urllib.parse import urlsplit, urlunsplit
 
 from shared.AMQP_Publisher import AMQPPublisher
+
+from haversine import distance_km, estimate_duration_seconds
 
 PAYMENT_URL    = os.getenv("PAYMENT_URL", "http://payment:8089")
 NEW_ORDERS_URL = os.getenv(
@@ -13,9 +17,36 @@ NEW_ORDERS_URL = os.getenv(
 RABBITMQ_URL   = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 # Must match checkout UI delivery line (default $4.99 → 499 cents)
 DELIVERY_FEE_CENTS = int(os.getenv("DELIVERY_FEE_CENTS", "499"))
+ETA_AVG_SPEED_KMH = float(os.getenv("ETA_AVG_SPEED_KMH", "30"))
+CUSTOMER_COOKING_MINUTES = 20
 
 # Shared async publisher — initialised in main.py lifespan
 publisher = AMQPPublisher()
+
+
+def _sanitize_base_url(url: str) -> str:
+    parts = urlsplit(url.strip())
+    return urlunsplit((parts.scheme, parts.netloc, parts.path.rstrip("/"), "", ""))
+
+
+SANITIZED_NEW_ORDERS_URL = _sanitize_base_url(NEW_ORDERS_URL)
+
+
+async def _request_first_success(
+    client: httpx.AsyncClient,
+    method: str,
+    candidates: list[str],
+    **kwargs,
+) -> httpx.Response:
+    last_response = None
+
+    for url in candidates:
+        resp = await client.request(method, url, **kwargs)
+        if resp.status_code not in (404, 405):
+            return resp
+        last_response = resp
+
+    return last_response
 
 
 async def publish_notification(user_id: str, order_id: str, status: str, message: str):
@@ -25,6 +56,74 @@ async def publish_notification(user_id: str, order_id: str, status: str, message
         "status"   : status,
         "message"  : message,
     })
+
+
+def _parse_coord(val) -> float | None:
+    if val is None or val == "":
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_coord(raw: dict, *keys: str) -> float | None:
+    """OutSystems / REST may use PascalCase or variants; try several keys."""
+    for k in keys:
+        c = _parse_coord(raw.get(k))
+        if c is not None:
+            return c
+    return None
+
+
+def _manual_eta_from_row(
+    raw: dict,
+    *,
+    fallback_dropoff_lat: float | None = None,
+    fallback_dropoff_lng: float | None = None,
+) -> dict | None:
+    """
+    Kitchen + customer (dropoff) coordinates from OutSystems Orders row, e.g.:
+    KitchenLat, KitchenLong (or KitchenLng); CLat, CLong (or CLang).
+    """
+    k_lat = _first_coord(raw, "KitchenLat", "kitchen_lat")
+    k_lng = _first_coord(raw, "KitchenLong", "KitchenLng", "kitchen_lng")
+    c_lat = (
+        _first_coord(raw, "CLat", "CustomerLat", "CustLat", "DropoffLat", "dropoff_lat")
+        or fallback_dropoff_lat
+    )
+    c_lng = (
+        _first_coord(raw, "CLong", "CLang", "CustomerLong", "CustomerLng", "CustLong", "DropoffLng", "dropoff_lng")
+        or fallback_dropoff_lng
+    )
+    if None in (k_lat, k_lng, c_lat, c_lng):
+        return None
+    dist = distance_km(k_lat, k_lng, c_lat, c_lng)
+    sec = estimate_duration_seconds(dist, ETA_AVG_SPEED_KMH)
+    travel_min = max(1, int(math.ceil(sec / 60)))
+    cook = CUSTOMER_COOKING_MINUTES
+    return {
+        "eta_distance_km": round(dist, 3),
+        "eta_travel_minutes": travel_min,
+        "eta_cooking_minutes": cook,
+        "eta_total_minutes": travel_min + cook,
+    }
+
+
+def _merge_eta_into(
+    target: dict,
+    raw: dict,
+    *,
+    fallback_dropoff_lat: float | None = None,
+    fallback_dropoff_lng: float | None = None,
+) -> None:
+    eta = _manual_eta_from_row(
+        raw,
+        fallback_dropoff_lat=fallback_dropoff_lat,
+        fallback_dropoff_lng=fallback_dropoff_lng,
+    )
+    if eta:
+        target.update(eta)
 
 
 def _normalize_order_for_ui(raw: dict) -> dict:
@@ -37,13 +136,23 @@ def _normalize_order_for_ui(raw: dict) -> dict:
         amount_cents = raw.get("total_cents")
         if amount_cents is None:
             amount_cents = raw.get("total_amount")
-        return {
+        out = {
             "order_id": raw.get("order_id") or raw.get("id"),
             "status": raw.get("status") or "confirmed",
             "dropoff_address": raw.get("dropoff_address") or raw.get("delivery_address", ""),
             "total_cents": int(amount_cents or 0),
             "created_at": raw.get("created_at"),
         }
+        _merge_eta_into(
+            out,
+            raw,
+            fallback_dropoff_lat=_parse_coord(raw.get("dropoff_lat")),
+            fallback_dropoff_lng=_parse_coord(raw.get("dropoff_lng")),
+        )
+        if "eta_total_minutes" not in out:
+            out["eta_unavailable"] = True
+            out["eta_unavailable_reason"] = "Estimated time is updating"
+        return out
 
     # OutSystems style
     status = (raw.get("KitchenAssignStatus") or "pending").lower()
@@ -55,19 +164,29 @@ def _normalize_order_for_ui(raw: dict) -> dict:
         "out_for_delivery": "out_for_delivery",
         "delivered": "delivered",
     }
-    return {
+    out = {
         "order_id": str(raw.get("OrderId", "")),
         "status": status_map.get(status, "confirmed"),
         "dropoff_address": raw.get("DeliveryAddress", ""),
         "total_cents": int(raw.get("TotalPrice", 0) or 0),
         "created_at": raw.get("CreatedAt"),
     }
+    _merge_eta_into(out, raw)
+    if "eta_total_minutes" not in out:
+        out["eta_unavailable"] = True
+        out["eta_unavailable_reason"] = "Estimated time is updating"
+    return out
 
 
 async def _fetch_order_by_id(order_id: int) -> tuple[dict | None, int]:
     async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(
-            f"{NEW_ORDERS_URL}/api/v1/order",
+        resp = await _request_first_success(
+            client,
+            "GET",
+            [
+                f"{SANITIZED_NEW_ORDERS_URL}/GetOrder",
+                f"{SANITIZED_NEW_ORDERS_URL}/api/v1/order",
+            ],
             params={"OrderId": str(order_id)},
         )
 
@@ -92,7 +211,15 @@ async def _reconcile_created_order_id(
     Reconcile by querying the orders list and matching by strong signature.
     """
     async with httpx.AsyncClient(timeout=10.0) as client:
-        resp = await client.get(f"{NEW_ORDERS_URL}/api/v1/orders")
+        resp = await _request_first_success(
+            client,
+            "GET",
+            [
+                f"{SANITIZED_NEW_ORDERS_URL}/GetAll",
+                f"{SANITIZED_NEW_ORDERS_URL}/GetPending",
+                f"{SANITIZED_NEW_ORDERS_URL}/api/v1/orders",
+            ],
+        )
 
     if resp.status_code != 200:
         return None
@@ -218,16 +345,23 @@ async def submit_order(
 
     # ── Step 4: Create order in OutSystems New Orders ──────────────────────────
     async with httpx.AsyncClient(timeout=10.0) as client:
-        order_resp = await client.post(
-            f"{NEW_ORDERS_URL}/api/v1/orders",
-            json={
-                "CustId": customer_id,
-                # OutSystems OrderRequest expects Items as a JSON string.
-                "Items": json.dumps(items),
-                "TotalPrice": total_cents,
-                "DeliveryAddress": dropoff_address,
-                "PaymentId": payment_data.get("payment_id", ""),
-            },
+        order_payload = {
+            "CustId": customer_id,
+            # OutSystems OrderRequest expects Items as a JSON string.
+            "Items": json.dumps(items),
+            "TotalPrice": total_cents,
+            "DeliveryAddress": dropoff_address,
+            "PaymentId": payment_data.get("payment_id", ""),
+        }
+        order_resp = await _request_first_success(
+            client,
+            "POST",
+            [
+                f"{SANITIZED_NEW_ORDERS_URL}/CreateOrder",
+                SANITIZED_NEW_ORDERS_URL,
+                f"{SANITIZED_NEW_ORDERS_URL}/api/v1/orders",
+            ],
+            json=order_payload,
         )
     outsystems_debug = {
         "status_code": order_resp.status_code,
@@ -331,20 +465,35 @@ async def submit_order(
         message="Your order has been confirmed and is being prepared!",
     )
 
-    # ── Step 6: Return confirmation ────────────────────────────────────────────
-    return {
+    # ── Step 6: Return confirmation (+ manual ETA: travel + 20 min cooking) ───
+    confirm = {
         "order_id"   : str(created_order_id),
         "payment_id" : payment_data.get("payment_id"),
         "status"     : "confirmed",
         "total_cents": total_cents,
-    }, 200
+    }
+    _merge_eta_into(
+        confirm,
+        created_order,
+        fallback_dropoff_lat=dropoff_lat,
+        fallback_dropoff_lng=dropoff_lng,
+    )
+    if "eta_total_minutes" not in confirm:
+        confirm["eta_unavailable"] = True
+        confirm["eta_unavailable_reason"] = "Estimated time is updating"
+    return confirm, 200
 
 
 async def get_order_status(order_id: str) -> tuple[dict, int]:
     async with httpx.AsyncClient(timeout=10.0) as client:
         order_id_query = int(order_id)
-        resp = await client.get(
-            f"{NEW_ORDERS_URL}/api/v1/order",
+        resp = await _request_first_success(
+            client,
+            "GET",
+            [
+                f"{SANITIZED_NEW_ORDERS_URL}/GetOrder",
+                f"{SANITIZED_NEW_ORDERS_URL}/api/v1/order",
+            ],
             params={"OrderId": str(order_id_query)},
         )
 

@@ -164,13 +164,30 @@ button:hover {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .muted {
   color: var(--muted-foreground);
   margin: 4px 0 0;
   font-size: 0.875rem;
+}
+
+.card-heading-block h3 {
+  margin-bottom: 4px;
+}
+
+.card-pill-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.order-item-summary {
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  color: var(--foreground);
 }
 
 /* ── Badges ──────────────────────────────────────────────────────────── */
@@ -198,6 +215,30 @@ button:hover {
   font-weight: 500;
 }
 
+.order-stat-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.meta-chip {
+  background: var(--input);
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  padding: 12px 14px;
+}
+
+.meta-chip p {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.meta-chip.compact {
+  padding: 10px 12px;
+}
+
 .middlebar {
   display: block;
   font-size: 0.75rem;
@@ -222,6 +263,70 @@ button:hover {
 .completion-summary p {
   margin: 0;
   font-size: 0.9rem;
+}
+
+.route-summary {
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  padding: 14px;
+  background: linear-gradient(180deg, hsl(214 32% 99%), var(--card));
+  margin-bottom: 16px;
+}
+
+.route-stop {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.route-stop p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.route-marker {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  margin-top: 24px;
+}
+
+.route-marker.pickup {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px hsla(217, 91%, 48%, 0.14);
+}
+
+.route-marker.dropoff {
+  background: var(--destructive);
+  box-shadow: 0 0 0 4px hsla(0, 84%, 58%, 0.12);
+}
+
+.route-connector {
+  width: 2px;
+  height: 18px;
+  background: var(--border);
+  margin: 6px 0 6px 5px;
+}
+
+.route-distance,
+.order-footer-note {
+  color: var(--muted-foreground);
+  font-size: 0.82rem;
+}
+
+.route-distance {
+  display: inline-block;
+  margin-top: 6px;
+}
+
+.order-footer-note {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  line-height: 1.4;
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
@@ -362,6 +467,30 @@ button:hover {
   margin-bottom: 16px;
 }
 
+.transport-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.transport-chip {
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted-foreground);
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+
+.transport-chip.active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px hsla(222, 47%, 22%, 0.18);
+}
+
 .fake-map {
   height: 260px;
   border-radius: var(--radius);
@@ -378,6 +507,21 @@ button:hover {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--border);
+}
+
+.map-frame-shell {
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  margin-bottom: 18px;
+  background: var(--card);
+}
+
+.live-map-frame {
+  width: 100%;
+  height: 320px;
+  border: 0;
+  display: block;
 }
 
 .route-box {
@@ -484,6 +628,19 @@ button:hover {
   }
 
   .order-info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card-top-row,
+  .order-footer-note {
+    flex-direction: column;
+  }
+
+  .card-pill-stack {
+    align-items: flex-start;
+  }
+
+  .order-stat-row {
     grid-template-columns: 1fr;
   }
 }

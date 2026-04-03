@@ -73,6 +73,7 @@ services:
     - name: assign-driver-routes
       paths:
         - /api/v1/driver/assign
+        - /api/v1/driver/pickup
         - /api/v1/driver/deliver
         - /api/v1/driver/orders
       methods: ["GET", "PUT", "OPTIONS"]

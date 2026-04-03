@@ -278,11 +278,18 @@ async def mark_order_picked_up(
     if not current_order:
         return {"error": "Order not found."}, 404
 
-    if current_order["status"] != "driver_assigned":
+    if current_order["status"] not in {"driver_assigned", "out_for_delivery"}:
         return {
             "error": "Order is not ready for pickup.",
             "status": current_order["status"],
         }, 409
+
+    if current_order["status"] == "out_for_delivery":
+        return {
+            "order_id": order_id,
+            "driver_id": driver_id,
+            "status": "out_for_delivery",
+        }, 200
 
     update_payload = {
         "KitchenId": str(current_order.get("kitchen_id") or ""),

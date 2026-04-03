@@ -6,14 +6,14 @@ import {
   updateOrderStatus,
 } from "../api/coordinateApi";
 
-const STATUSES = ["pending", "cooking", "finished_cooking", "driver_assigned"];
+const STATUSES = ["pending", "cooking", "finished_cooking", "driver_assigned", "out_for_delivery"];
 
 const TABS = [
   { id: "all", label: "All" },
   { id: "pending", label: "New" },
   { id: "cooking", label: "Preparing" },
   { id: "finished_cooking", label: "Ready" },
-  { id: "driver_assigned", label: "Picked Up" },
+  { id: "picked_up", label: "Picked Up" },
 ];
 
 const FALLBACK_KITCHEN_ID = import.meta.env.VITE_KITCHEN_ID || null;
@@ -126,7 +126,7 @@ export default function KitchenDashboardPage() {
     pending: [],
     cooking: [],
     finished_cooking: [],
-    driver_assigned: [],
+    picked_up: [],
   });
   const [kitchenId, setKitchenId] = useState(null);
   const [kitchenOptions, setKitchenOptions] = useState([]);
@@ -170,14 +170,17 @@ export default function KitchenDashboardPage() {
         filterByKitchenId(data.finished_cooking || [], selectedKitchenId),
       );
       const pickedUp = sortByRecent(
-        filterByKitchenId(data.driver_assigned || [], selectedKitchenId),
+        filterByKitchenId(
+          [...(data.driver_assigned || []), ...(data.out_for_delivery || [])],
+          selectedKitchenId,
+        ),
       );
 
       setBucket({
         pending,
         cooking,
         finished_cooking: ready,
-        driver_assigned: pickedUp,
+        picked_up: pickedUp,
       });
       setKitchenId(selectedKitchenId);
 
@@ -210,19 +213,24 @@ export default function KitchenDashboardPage() {
       new: bucket.pending.length,
       preparing: bucket.cooking.length,
       ready: bucket.finished_cooking.length,
-      pickedUp: bucket.driver_assigned.length,
+      pickedUp: bucket.picked_up.length,
     }),
     [bucket],
   );
 
   const displayOrders = useMemo(() => {
-    const merged = [...bucket.pending, ...bucket.cooking, ...bucket.finished_cooking, ...bucket.driver_assigned];
+    const merged = [
+      ...bucket.pending,
+      ...bucket.cooking,
+      ...bucket.finished_cooking,
+      ...bucket.picked_up,
+    ];
     const sorted = sortByRecent(merged);
     if (tab === "all") return sorted;
     if (tab === "pending") return sortByRecent(bucket.pending);
     if (tab === "cooking") return sortByRecent(bucket.cooking);
     if (tab === "finished_cooking") return sortByRecent(bucket.finished_cooking);
-    if (tab === "driver_assigned") return sortByRecent(bucket.driver_assigned);
+    if (tab === "picked_up") return sortByRecent(bucket.picked_up);
     return sorted;
   }, [bucket, tab]);
 

@@ -1,6 +1,6 @@
 /**
  * Kitchen UI talks to Kong at `/api/v1/kitchen/*` (same gateway pattern as OrderUI/RiderUI).
- * Kong forwards those routes to `coordinate-fulfilment`.
+ * Kong forwards those routes to `order-processor`.
  */
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 const KITCHEN_API = `${BASE_URL}/api/v1/kitchen`;
@@ -30,7 +30,7 @@ export async function updateOrderStatus(orderId, status) {
   return data;
 }
 
-/** True when coordinate-fulfilment is reachable. */
+/** True when order-processor is reachable. */
 export async function fetchCoordinateHealth() {
   try {
     const res = await fetch(`${KITCHEN_API}/health`);

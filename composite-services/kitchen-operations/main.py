@@ -22,7 +22,7 @@ async def polling_loop():
         try:
             await poll_and_assign()
         except Exception as exc:
-            print(f"[assign-kitchen] polling error: {exc}")
+            print(f"[kitchen-operations] polling error: {exc}")
         await asyncio.sleep(POLL_INTERVAL)
 
 

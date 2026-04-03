@@ -136,7 +136,7 @@ services:
   assign-kitchen:
     build:
       context: ..
-      dockerfile: composite-services/assign-kitchen/Dockerfile
+      dockerfile: ../composite-services/kitchen-operations/Dockerfile
     env_file: ../.env
     environment:
       PYTHONUNBUFFERED: "1"
@@ -157,7 +157,7 @@ services:
   coordinate-fulfilment:
     build:
       context: ..
-      dockerfile: composite-services/coordinate-fulfilment/Dockerfile
+      dockerfile: ../composite-services/order-processor/Dockerfile
     env_file: ../.env
     environment:
       PYTHONUNBUFFERED: "1"

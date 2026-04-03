@@ -2,10 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-COPY composite-services/assign-kitchen/requirements.txt .
+COPY composite-services/kitchen-operations/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY composite-services/assign-kitchen/ .
+COPY composite-services/kitchen-operations/ .
 
 EXPOSE 8093
 

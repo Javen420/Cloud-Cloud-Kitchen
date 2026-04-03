@@ -23,7 +23,7 @@ async def polling_loop():
         try:
             await poll_cooking_orders()
         except Exception as exc:
-            print(f"[coordinate-fulfilment] polling error: {exc}")
+            print(f"[order-processor] polling error: {exc}")
         await asyncio.sleep(POLL_INTERVAL)
 
 

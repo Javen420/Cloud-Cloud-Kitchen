@@ -99,8 +99,8 @@ jobs:
           - atomic-services/kitchen-assignment
           - atomic-services/notifications
           - composite-services/assign-driver
-          - composite-services/assign-kitchen
-          - composite-services/coordinate-fulfilment
+          - composite-services/kitchen-operations
+          - composite-services/order-processor
           - composite-services/order-fulfilment
           - composite-services/etaTracking
 

@@ -151,9 +151,7 @@ def _normalize_order_for_ui(raw: dict) -> dict:
         )
         if "eta_total_minutes" not in out:
             out["eta_unavailable"] = True
-            out["eta_unavailable_reason"] = (
-                "Kitchen and customer coordinates are not on this order record yet."
-            )
+            out["eta_unavailable_reason"] = "Estimated time is updating"
         return out
 
     # OutSystems style
@@ -176,10 +174,7 @@ def _normalize_order_for_ui(raw: dict) -> dict:
     _merge_eta_into(out, raw)
     if "eta_total_minutes" not in out:
         out["eta_unavailable"] = True
-        out["eta_unavailable_reason"] = (
-            "Kitchen and/or customer coordinates are not on this order yet "
-            "(need KitchenLat/KitchenLong and CLat/CLong from OutSystems)."
-        )
+        out["eta_unavailable_reason"] = "Estimated time is updating"
     return out
 
 
@@ -485,9 +480,7 @@ async def submit_order(
     )
     if "eta_total_minutes" not in confirm:
         confirm["eta_unavailable"] = True
-        confirm["eta_unavailable_reason"] = (
-            "ETA will show once OutSystems has KitchenLat/KitchenLong and CLat/CLong (or checkout lat/lng)."
-        )
+        confirm["eta_unavailable_reason"] = "Estimated time is updating"
     return confirm, 200
 
 

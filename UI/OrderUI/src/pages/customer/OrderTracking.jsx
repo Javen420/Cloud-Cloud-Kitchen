@@ -165,8 +165,7 @@ export default function OrderTracking() {
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground leading-relaxed">
-                    {order.eta_unavailable_reason ||
-                      "Estimated time will updated here shortly. "}
+                    {order.eta_unavailable_reason || "Estimated time is updating"}
                   </p>
                 )}
               </div>

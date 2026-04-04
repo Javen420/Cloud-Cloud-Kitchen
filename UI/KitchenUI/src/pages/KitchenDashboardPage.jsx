@@ -22,23 +22,60 @@ function filterAssignedPending(orders) {
   return orders.filter((o) => o.kitchen_id);
 }
 
-function filterByKitchenId(orders, kitchenId) {
-  if (!kitchenId) return orders;
-  return orders.filter((o) => o.kitchen_id === kitchenId);
+function normalizeKitchenLabel(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function filterByKitchenOption(orders, selectedOption) {
+  if (!selectedOption) return orders;
+  const kitchenIds = new Set(selectedOption.kitchenIds || []);
+  return orders.filter((o) => kitchenIds.has(o.kitchen_id));
 }
 
 function collectKitchenOptions(data) {
   const seen = new Map();
   for (const status of STATUSES) {
     for (const order of data[status] || []) {
-      if (!order.kitchen_id || seen.has(order.kitchen_id)) continue;
-      seen.set(order.kitchen_id, {
-        id: order.kitchen_id,
-        label: order.kitchen_address || order.kitchen_name || order.kitchen_id,
-      });
+      if (!order.kitchen_id) continue;
+      const label = order.kitchen_address || order.kitchen_name || order.kitchen_id;
+      const key = normalizeKitchenLabel(label) || String(order.kitchen_id);
+      if (!seen.has(key)) {
+        seen.set(key, {
+          value: key,
+          label,
+          kitchenIds: [],
+        });
+      }
+      const option = seen.get(key);
+      if (!option.kitchenIds.includes(order.kitchen_id)) {
+        option.kitchenIds.push(order.kitchen_id);
+      }
     }
   }
-  return Array.from(seen.values()).sort((a, b) => a.label.localeCompare(b.label));
+  const dedupedByLabel = new Map();
+  for (const option of seen.values()) {
+    const labelKey = normalizeKitchenLabel(option.label) || option.value;
+    const existing = dedupedByLabel.get(labelKey);
+    if (!existing) {
+      dedupedByLabel.set(labelKey, {
+        ...option,
+        kitchenIds: [...option.kitchenIds],
+      });
+      continue;
+    }
+    for (const kitchenId of option.kitchenIds) {
+      if (!existing.kitchenIds.includes(kitchenId)) {
+        existing.kitchenIds.push(kitchenId);
+      }
+    }
+  }
+  return Array.from(dedupedByLabel.values()).sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function numericOrderId(id) {
@@ -136,7 +173,7 @@ export default function KitchenDashboardPage() {
     finished_cooking: [],
     picked_up: [],
   });
-  const [kitchenId, setKitchenId] = useState(null);
+  const [selectedKitchen, setSelectedKitchen] = useState(null);
   const [kitchenOptions, setKitchenOptions] = useState([]);
   const [online, setOnline] = useState(true);
   const [lastSynced, setLastSynced] = useState(null);
@@ -144,67 +181,81 @@ export default function KitchenDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState(null);
   const prevNewCount = useRef(0);
+  const inFlightLoadRef = useRef(null);
 
-  const loadAll = useCallback(async () => {
-    setLoading(true);
-    setStatusMsg("Syncing...");
-    try {
-      const [health, firstPass] = await Promise.all([
-        fetchCoordinateHealth(),
-        fetchOrdersByStatuses(STATUSES),
-      ]);
-      setOnline(health);
-
-      const options = collectKitchenOptions(firstPass);
-      setKitchenOptions(options);
-
-      const selectedKitchenId =
-        kitchenId ||
-        FALLBACK_KITCHEN_ID ||
-        options[0]?.id ||
-        null;
-
-      const data = selectedKitchenId
-        ? await fetchOrdersByStatuses(STATUSES, selectedKitchenId)
-        : firstPass;
-
-      const pending = sortByRecent(
-        filterAssignedPending(filterByKitchenId(data.pending || [], selectedKitchenId)),
-      );
-      const cooking = sortByRecent(
-        filterByKitchenId(data.cooking || [], selectedKitchenId),
-      );
-      const ready = sortByRecent(
-        filterByKitchenId(data.finished_cooking || [], selectedKitchenId),
-      );
-      const pickedUp = sortByRecent(
-        filterByKitchenId(
-          [...(data.driver_assigned || []), ...(data.out_for_delivery || [])],
-          selectedKitchenId,
-        ),
-      );
-      setBucket({
-        pending,
-        cooking,
-        finished_cooking: ready,
-        picked_up: pickedUp,
-      });
-      setKitchenId(selectedKitchenId);
-
-      prevNewCount.current = pending.length;
-      setLastSynced(new Date());
-      setStatusMsg(
-        health
-          ? `Last synced ${new Date().toLocaleTimeString()}`
-          : "Service unreachable - showing last data",
-      );
-    } catch (e) {
-      setStatusMsg(e.message || "Could not load orders");
-      setOnline(false);
-    } finally {
-      setLoading(false);
+  const loadAll = useCallback(async ({ force = false } = {}) => {
+    if (inFlightLoadRef.current && !force) {
+      return inFlightLoadRef.current;
     }
-  }, [kitchenId]);
+
+    if (inFlightLoadRef.current && force) {
+      try {
+        await inFlightLoadRef.current;
+      } catch {
+        // Refresh with a new request below.
+      }
+    }
+
+    inFlightLoadRef.current = (async () => {
+      setLoading(true);
+      setStatusMsg("Syncing...");
+      try {
+        const [health, firstPass] = await Promise.all([
+          fetchCoordinateHealth(),
+          fetchOrdersByStatuses(STATUSES),
+        ]);
+        setOnline(health);
+
+        const options = collectKitchenOptions(firstPass);
+        setKitchenOptions(options);
+
+        const selectedOption =
+          options.find((option) => option.value === selectedKitchen) ||
+          options.find((option) => option.kitchenIds.includes(FALLBACK_KITCHEN_ID)) ||
+          options[0] ||
+          null;
+
+        const pending = sortByRecent(
+          filterAssignedPending(filterByKitchenOption(firstPass.pending || [], selectedOption)),
+        );
+        const cooking = sortByRecent(
+          filterByKitchenOption(firstPass.cooking || [], selectedOption),
+        );
+        const ready = sortByRecent(
+          filterByKitchenOption(firstPass.finished_cooking || [], selectedOption),
+        );
+        const pickedUp = sortByRecent(
+          filterByKitchenOption(
+            [...(firstPass.driver_assigned || []), ...(firstPass.out_for_delivery || [])],
+            selectedOption,
+          ),
+        );
+        setBucket({
+          pending,
+          cooking,
+          finished_cooking: ready,
+          picked_up: pickedUp,
+        });
+        setSelectedKitchen(selectedOption?.value || null);
+
+        prevNewCount.current = pending.length;
+        setLastSynced(new Date());
+        setStatusMsg(
+          health
+            ? `Last synced ${new Date().toLocaleTimeString()}`
+            : "Service unreachable - showing last data",
+        );
+      } catch (e) {
+        setStatusMsg(e.message || "Could not load orders");
+        setOnline(false);
+      } finally {
+        setLoading(false);
+        inFlightLoadRef.current = null;
+      }
+    })();
+
+    return inFlightLoadRef.current;
+  }, [selectedKitchen]);
 
   useEffect(() => {
     loadAll();
@@ -224,6 +275,27 @@ export default function KitchenDashboardPage() {
     }),
     [bucket],
   );
+
+  const displayKitchenOptions = useMemo(() => {
+    const deduped = new Map();
+    for (const option of kitchenOptions) {
+      const key = normalizeKitchenLabel(option.label) || option.value;
+      const existing = deduped.get(key);
+      if (!existing) {
+        deduped.set(key, {
+          ...option,
+          kitchenIds: [...(option.kitchenIds || [])],
+        });
+        continue;
+      }
+      for (const kitchenId of option.kitchenIds || []) {
+        if (!existing.kitchenIds.includes(kitchenId)) {
+          existing.kitchenIds.push(kitchenId);
+        }
+      }
+    }
+    return Array.from(deduped.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [kitchenOptions]);
 
   const displayOrders = useMemo(() => {
     const merged = [
@@ -251,7 +323,7 @@ export default function KitchenDashboardPage() {
     setUpdatingId(orderId);
     try {
       await updateOrderStatus(orderId, next);
-      await loadAll();
+      await loadAll({ force: true });
     } catch (e) {
       setStatusMsg(e.message || "Update failed");
     } finally {
@@ -327,18 +399,18 @@ export default function KitchenDashboardPage() {
         </section>
 
         <section className="mb-6">
-          {kitchenOptions.length > 0 && (
+          {displayKitchenOptions.length > 0 && (
             <div className="max-w-lg">
               <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-[hsl(215_16%_42%)]">
                 Active Kitchen
               </label>
               <select
-                value={kitchenId || ""}
-                onChange={(e) => setKitchenId(e.target.value || null)}
+                value={selectedKitchen || ""}
+                onChange={(e) => setSelectedKitchen(e.target.value || null)}
                 className="w-full rounded-2xl border border-[hsl(214_24%_88%)] bg-white px-4 py-3 text-sm font-medium text-[hsl(222_47%_18%)] outline-none shadow-[0_10px_30px_rgba(15,23,42,0.06)] transition focus:border-[hsl(217_91%_48%)]"
               >
-                {kitchenOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
+                {displayKitchenOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
                 ))}

@@ -6,7 +6,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from schemas import UpdateStatusRequest
-from orchestrator import poll_cooking_orders, update_order_status, get_orders_by_status
+from orchestrator import (
+    poll_cooking_orders,
+    update_order_status,
+    get_orders_by_status,
+    get_orders_grouped_by_status,
+)
 
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL_SECONDS", "10"))
 
@@ -52,6 +57,13 @@ async def list_orders(status: str = "pending", kitchen_id: str | None = None):
 @app.get("/api/v1/kitchen/orders")
 async def list_orders_kitchen(status: str = "pending", kitchen_id: str | None = None):
     response, status_code = await get_orders_by_status(status, kitchen_id=kitchen_id)
+    return JSONResponse(content=response, status_code=status_code)
+
+
+@app.get("/api/v1/kitchen/orders/grouped")
+async def list_orders_grouped_kitchen(statuses: str, kitchen_id: str | None = None):
+    requested = [s.strip().lower() for s in statuses.split(",") if s.strip()]
+    response, status_code = await get_orders_grouped_by_status(requested, kitchen_id=kitchen_id)
     return JSONResponse(content=response, status_code=status_code)
 
 

@@ -5,37 +5,75 @@ import OrderListCard from "../components/rider/OrderListCard";
 import { getAvailableOrders, getCurrentDriverOrders } from "../services/riderApi";
 import { getActiveOrder, getCurrentPosition, getDriverId } from "../lib/driverSession";
 
+const REFRESH_INTERVAL_MS = 10000;
+
 export default function AvailableOrdersPage() {
   const navigate = useNavigate();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeJob, setActiveJob] = useState(() => getActiveOrder());
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const driverId = getDriverId();
   const latestFetchIdRef = useRef(0);
+  const inFlightFetchRef = useRef(null);
 
-  async function fetchOrders() {
+  async function fetchOrders({ silent = false } = {}) {
+    if (inFlightFetchRef.current) {
+      return inFlightFetchRef.current;
+    }
+
     const fetchId = latestFetchIdRef.current + 1;
     latestFetchIdRef.current = fetchId;
-    setLoading(true);
-    setError(null);
-    try {
-      const { lat, lng } = await getCurrentPosition();
-      const data = await getAvailableOrders(lat, lng);
-      if (latestFetchIdRef.current !== fetchId) return;
-      setOrders(data);
+    inFlightFetchRef.current = (async () => {
+      if (!silent) {
+        setLoading(true);
+      }
       setError(null);
-    } catch (err) {
-      if (latestFetchIdRef.current !== fetchId) return;
-      setError(err.message);
-    } finally {
-      if (latestFetchIdRef.current !== fetchId) return;
-      setLoading(false);
-    }
+      try {
+        const { lat, lng } = await getCurrentPosition();
+        const data = await getAvailableOrders(lat, lng);
+        if (latestFetchIdRef.current !== fetchId) return;
+        setOrders(data);
+        setError(null);
+        setLastSyncedAt(new Date());
+      } catch (err) {
+        if (latestFetchIdRef.current !== fetchId) return;
+        setError(err.message);
+      } finally {
+        if (latestFetchIdRef.current === fetchId && !silent) {
+          setLoading(false);
+        }
+        inFlightFetchRef.current = null;
+      }
+    })();
+
+    return inFlightFetchRef.current;
   }
 
   useEffect(() => {
     fetchOrders();
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      fetchOrders({ silent: true });
+    }, REFRESH_INTERVAL_MS);
+
+    function onWindowVisible() {
+      if (document.visibilityState === "visible") {
+        fetchOrders({ silent: true });
+      }
+    }
+
+    window.addEventListener("focus", onWindowVisible);
+    document.addEventListener("visibilitychange", onWindowVisible);
+
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", onWindowVisible);
+      document.removeEventListener("visibilitychange", onWindowVisible);
+    };
   }, []);
 
   useEffect(() => {
@@ -77,7 +115,10 @@ export default function AvailableOrdersPage() {
       <div className="summary-banner">
         <div>
           <span className="middlebar">Current status</span>
-          <p>Online and ready to accept jobs</p>
+          <p>
+            Online and ready to accept jobs
+            {lastSyncedAt ? ` · Synced ${lastSyncedAt.toLocaleTimeString()}` : ""}
+          </p>
         </div>
         <div>
           <span className="middlebar">Available jobs</span>
@@ -93,6 +134,9 @@ export default function AvailableOrdersPage() {
       {activeJob?.order && (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <strong>Current job:</strong> {activeJob.order.id} at {activeJob.order.pickupStore}
+          <p style={{ marginTop: "0.5rem" }}>
+            Finish or deliver the current job before accepting another order.
+          </p>
           <div style={{ marginTop: "0.75rem" }}>
             <button className="primary-btn" onClick={resumeActiveJob}>
               Resume Current Job
@@ -115,7 +159,12 @@ export default function AvailableOrdersPage() {
 
       <div className="card-grid">
         {orders.map((order) => (
-          <OrderListCard key={order.id} order={order} />
+          <OrderListCard
+            key={order.id}
+            order={order}
+            disabled={Boolean(activeJob?.order)}
+            disabledReason={activeJob?.order ? "Complete the current job first." : ""}
+          />
         ))}
       </div>
     </RiderLayout>

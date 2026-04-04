@@ -18,6 +18,7 @@ export default function RiderOrderDetailsPage() {
   const [serverOrder, setServerOrder] = useState(null);
   const order = location.state?.order || fallbackOrder || serverOrder;
   const [loadingServerOrder, setLoadingServerOrder] = useState(false);
+  const [hasConflictingActiveJob, setHasConflictingActiveJob] = useState(false);
 
   const [accepting, setAccepting] = useState(false);
   const [acceptError, setAcceptError] = useState(null);
@@ -37,7 +38,26 @@ export default function RiderOrderDetailsPage() {
     loadCurrentOrder();
   }, [id, order]);
 
+  useEffect(() => {
+    async function checkForConflictingJob() {
+      try {
+        const currentOrders = await getCurrentDriverOrders(getDriverId());
+        setHasConflictingActiveJob(
+          currentOrders.some((currentOrder) => String(currentOrder.id) !== String(id)),
+        );
+      } catch {
+        setHasConflictingActiveJob(false);
+      }
+    }
+    checkForConflictingJob();
+  }, [id]);
+
   async function handleAccept() {
+    if (hasConflictingActiveJob) {
+      setAcceptError("Complete the current job before accepting another order.");
+      return;
+    }
+
     setAccepting(true);
     setAcceptError(null);
     try {
@@ -140,6 +160,12 @@ export default function RiderOrderDetailsPage() {
           </p>
         )}
 
+        {hasConflictingActiveJob && !acceptError && (
+          <p style={{ color: "red", marginTop: "0.5rem" }}>
+            <strong>Error:</strong> Complete the current job before accepting another order.
+          </p>
+        )}
+
         <div className="action-row">
           <button
             className="secondary-btn"
@@ -151,9 +177,9 @@ export default function RiderOrderDetailsPage() {
           <button
             className="primary-btn"
             onClick={handleAccept}
-            disabled={accepting}
+            disabled={accepting || hasConflictingActiveJob}
           >
-            {accepting ? "Accepting..." : "Accept Order"}
+            {hasConflictingActiveJob ? "Current Job In Progress" : accepting ? "Accepting..." : "Accept Order"}
           </button>
         </div>
       </section>

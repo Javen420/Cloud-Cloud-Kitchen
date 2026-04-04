@@ -42,6 +42,14 @@ export async function fetchCoordinateHealth() {
 
 /** Load several statuses in parallel (for dashboard stats + "All" tab). */
 export async function fetchOrdersByStatuses(statuses, kitchenId = null) {
-  const lists = await Promise.all(statuses.map((s) => fetchOrdersByStatus(s, kitchenId)));
-  return Object.fromEntries(statuses.map((s, i) => [s, lists[i]]));
+  const params = new URLSearchParams({ statuses: statuses.join(",") });
+  if (kitchenId) params.set("kitchen_id", kitchenId);
+
+  const res = await fetch(`${KITCHEN_API}/orders/grouped?${params.toString()}`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || res.statusText || "Failed to load orders");
+  }
+
+  return data.orders || Object.fromEntries(statuses.map((status) => [status, []]));
 }

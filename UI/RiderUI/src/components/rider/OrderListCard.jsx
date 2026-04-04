@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 
-export default function OrderListCard({ order }) {
+export default function OrderListCard({ order, disabled = false, disabledReason = "" }) {
   const navigate = useNavigate();
 
   const totalTripKm =
@@ -97,8 +97,10 @@ export default function OrderListCard({ order }) {
       <button
         className="primary-btn"
         onClick={() => navigate(`/rider/order/${order.id}`, { state: { order } })}
+        disabled={disabled}
+        title={disabledReason}
       >
-        View Job Details
+        {disabled ? "Current Job In Progress" : "View Job Details"}
       </button>
     </article>
   );

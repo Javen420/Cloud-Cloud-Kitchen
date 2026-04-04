@@ -286,6 +286,21 @@ async def assign_driver(
     dropoff_lat: float | None = None,
     dropoff_lng: float | None = None,
 ) -> tuple[dict, int]:
+    current_driver_orders, current_driver_status = await get_current_driver_orders(driver_id)
+    if current_driver_status != 200:
+        return {"error": "Failed to verify current driver assignments."}, 502
+
+    active_driver_orders = current_driver_orders.get("orders") or []
+    conflicting_order = next(
+        (order for order in active_driver_orders if str(order.get("id")) != str(order_id)),
+        None,
+    )
+    if conflicting_order:
+        return {
+            "error": "Driver already has an active job.",
+            "active_order_id": conflicting_order.get("id"),
+        }, 409
+
     current_order = await _get_order(order_id)
     if not current_order:
         return {"error": "Order not found."}, 404

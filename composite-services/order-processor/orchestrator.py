@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from urllib.parse import urlsplit, urlunsplit
 
 import aiohttp
@@ -15,6 +16,8 @@ RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 NOTIFICATION_QUEUE = os.getenv("NOTIFICATION_QUEUE", "notifications")
 
 ALLOWED_STATUSES = {"cooking", "finished_cooking"}
+ORDERS_CACHE_TTL_SECONDS = float(os.getenv("ORDERS_CACHE_TTL_SECONDS", "5"))
+_orders_cache: dict[str, object] = {"expires_at": 0.0, "orders": []}
 
 
 def _sanitize_base_url(url: str) -> str:
@@ -52,13 +55,24 @@ def _normalize_outsystems_order(raw: dict) -> dict:
 
 
 async def _get_all_orders(session: aiohttp.ClientSession) -> list[dict]:
+    now = time.monotonic()
+    cached_orders = _orders_cache.get("orders") or []
+    expires_at = float(_orders_cache.get("expires_at") or 0.0)
+    if now < expires_at and cached_orders:
+        return list(cached_orders)
+
     async with session.get(f"{SANITIZED_NEW_ORDERS_URL}/GetAll") as resp:
         if resp.status != 200:
             print(f"[coordinate-fulfilment] Failed to poll orders: {resp.status}")
+            if cached_orders:
+                return list(cached_orders)
             return []
         body = await resp.json()
         raw_orders = body if isinstance(body, list) else []
-        return [_normalize_outsystems_order(o) for o in raw_orders]
+        orders = [_normalize_outsystems_order(o) for o in raw_orders]
+        _orders_cache["orders"] = orders
+        _orders_cache["expires_at"] = now + ORDERS_CACHE_TTL_SECONDS
+        return list(orders)
 
 
 async def poll_cooking_orders():
@@ -75,6 +89,22 @@ async def get_orders_by_status(status: str, kitchen_id: str | None = None) -> tu
         if kitchen_id:
             filtered = [o for o in filtered if str(o.get("kitchen_id") or "") == kitchen_id]
         return {"orders": filtered}, 200
+
+
+async def get_orders_grouped_by_status(
+    statuses: list[str],
+    kitchen_id: str | None = None,
+) -> tuple[dict, int]:
+    async with aiohttp.ClientSession() as session:
+        orders = await _get_all_orders(session)
+        if kitchen_id:
+            orders = [o for o in orders if str(o.get("kitchen_id") or "") == kitchen_id]
+
+        grouped = {
+            status: [o for o in orders if o["status"] == status]
+            for status in statuses
+        }
+        return {"orders": grouped}, 200
 
 
 async def _get_order_by_id(session: aiohttp.ClientSession, order_id: str) -> dict | None:
@@ -119,6 +149,8 @@ async def update_order_status(order_id: str, status: str) -> tuple[dict, int]:
                 except Exception:
                     body = {"error": await resp.text()}
                 return {"error": body.get("error") or body.get("Message") or "Status update failed"}, resp.status
+
+        _orders_cache["expires_at"] = 0.0
 
         if status == "finished_cooking":
             try:

@@ -71,7 +71,7 @@ export default function CustomerCheckout() {
     try {
       const orderId = crypto.randomUUID();
       const idempotencyKey = crypto.randomUUID();
-      const customerId = formData.phone || formData.name || "customer";
+      const customerId = formData.name || formData.phone || "customer";
       const intent = await createPaymentIntent({
         order_id: orderId,
         customer_id: customerId,
@@ -123,7 +123,7 @@ export default function CustomerCheckout() {
 
       // Step 3: Submit Order with Formatted Address and Coordinates
       const data = await submitOrder({
-        customer_id: formData.phone || formData.name || "customer",
+        customer_id: formData.name || formData.phone || "customer",
         items: cartItems.map((item) => ({
           Id: item.id,
           Name: item.name,

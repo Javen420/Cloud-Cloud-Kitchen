@@ -26,7 +26,7 @@ export default function CompletedPage() {
         <div className="success-icon">✓</div>
         <h2>Delivery Completed</h2>
         <p>
-          You have successfully delivered <strong>{id}</strong>
+          You have successfully delivered order no. <strong>{id}</strong>
           {order?.customerName ? (
             <>
               {" "}to <strong>{order.customerName}</strong>

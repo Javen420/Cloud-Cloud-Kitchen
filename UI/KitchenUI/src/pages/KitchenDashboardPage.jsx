@@ -104,8 +104,7 @@ function displayOrderId(id) {
 
 function shortCustomer(userId) {
   if (!userId) return "Customer";
-  const part = userId.split("-")[0];
-  return part ? `${part.slice(0, 1).toUpperCase()}${part.slice(1, 8)}...` : "Customer";
+  return userId;
 }
 
 function relativeAge(iso) {

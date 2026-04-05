@@ -1,0 +1,87 @@
+basePath: /
+definitions:
+  handler.ETAResult:
+    properties:
+      calculated_at:
+        type: string
+      distance_meters:
+        type: integer
+      driver_id:
+        type: string
+      estimated_minutes:
+        type: integer
+      order_id:
+        type: string
+      source:
+        type: string
+    type: object
+host: localhost:8088
+info:
+  contact: {}
+  description: Calculates delivery ETA using Google Routes or haversine fallback
+  title: ETA Calculation Service
+  version: "1.0"
+paths:
+  /api/v1/eta/calculate:
+    get:
+      description: Returns estimated time and distance from driver to dropoff using
+        Google Routes API, falling back to haversine
+      parameters:
+      - description: Order ID
+        in: query
+        name: order_id
+        required: true
+        type: string
+      - description: Driver ID
+        in: query
+        name: driver_id
+        required: true
+        type: string
+      - description: Driver latitude
+        in: query
+        name: driver_lat
+        required: true
+        type: number
+      - description: Driver longitude
+        in: query
+        name: driver_lng
+        required: true
+        type: number
+      - description: Dropoff latitude
+        in: query
+        name: dropoff_lat
+        required: true
+        type: number
+      - description: Dropoff longitude
+        in: query
+        name: dropoff_lng
+        required: true
+        type: number
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.ETAResult'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Calculate delivery ETA
+      tags:
+      - eta
+  /health:
+    get:
+      description: Returns service health status
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check
+      tags:
+      - health
+swagger: "2.0"

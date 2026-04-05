@@ -12,11 +12,19 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	httpSwagger "github.com/swaggo/http-swagger"
 
+	_ "cloudKitchen/ETACalculator/docs"
 	"cloudKitchen/ETACalculator/internal/config"
 	"cloudKitchen/ETACalculator/internal/handler"
 	"cloudKitchen/ETACalculator/internal/routes"
 )
+
+// @title        ETA Calculation Service
+// @version      1.0
+// @description  Calculates delivery ETA using Google Routes or haversine fallback
+// @host         localhost:8088
+// @BasePath     /
 
 func main() {
 	cfg := config.Load()
@@ -28,6 +36,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Get("/api/v1/eta/calculate", h.CalculateETA)
 	r.Get("/health", h.Health)
+	r.Get("/docs/*", httpSwagger.WrapHandler)
 
 	server := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),

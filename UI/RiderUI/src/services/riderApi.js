@@ -27,13 +27,10 @@ function normalizeOrder(raw) {
   const itemsList = Array.isArray(raw.items) ? raw.items : [];
   const itemCount = itemsList.length;
 
-  // Prefer server-calculated payout; fall back to legacy 10% model
+  // Prefer server-calculated payout; fall back to fixed delivery fee
   const serverPayout = raw.payout;
-  const legacyPayout = (() => {
-    const totalCents = raw.total_amount || 0;
-    const p = parseFloat(((totalCents * 0.1) / 100).toFixed(2));
-    return p > 0 ? p : 4.99;
-  })();
+  const DELIVERY_FEE = 4.99;
+  const legacyPayout = DELIVERY_FEE;
 
   return {
     id: raw.id,
@@ -49,7 +46,7 @@ function normalizeOrder(raw) {
     pickupAddress: raw.kitchen_address || "Kitchen address pending assignment",
     pickupInstruction: "Show order code to kitchen staff.",
     dropoffAddress: raw.delivery_address || "Address unavailable",
-    customerName: raw.user_id ? raw.user_id.slice(0, 8) : "Customer",
+    customerName: raw.user_id || "Customer",
     items: itemCount,
     itemsList,
     orderCode: (raw.id || "").slice(-4).toUpperCase() || "----",

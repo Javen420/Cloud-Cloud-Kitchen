@@ -64,9 +64,7 @@ def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 
 def calculate_payout(pickup_km: float, delivery_km: float) -> float:
-    total_km = pickup_km + delivery_km
-    payout = RIDER_BASE_FEE + (RIDER_PER_KM_RATE * total_km)
-    return round(max(payout, RIDER_MIN_PAYOUT), 2)
+    return RIDER_MIN_PAYOUT  # Fixed delivery fee, matches customer charge
 
 
 def _parse_items(raw_items):

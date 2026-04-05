@@ -28,6 +28,19 @@ func New(g *routes.Client) *Handler {
 	return &Handler{google: g}
 }
 
+// CalculateETA godoc
+// @Summary      Calculate delivery ETA
+// @Description  Returns estimated time and distance from driver to dropoff using Google Routes API, falling back to haversine
+// @Tags         eta
+// @Param        order_id    query  string  true  "Order ID"
+// @Param        driver_id   query  string  true  "Driver ID"
+// @Param        driver_lat  query  number  true  "Driver latitude"
+// @Param        driver_lng  query  number  true  "Driver longitude"
+// @Param        dropoff_lat query  number  true  "Dropoff latitude"
+// @Param        dropoff_lng query  number  true  "Dropoff longitude"
+// @Success      200  {object}  ETAResult
+// @Failure      400  {object}  map[string]string
+// @Router       /api/v1/eta/calculate [get]
 func (h *Handler) CalculateETA(w http.ResponseWriter, r *http.Request) {
 	orderID := r.URL.Query().Get("order_id")
 	driverID := r.URL.Query().Get("driver_id")
@@ -81,6 +94,12 @@ func (h *Handler) CalculateETA(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, result)
 }
 
+// Health godoc
+// @Summary      Health check
+// @Description  Returns service health status
+// @Tags         health
+// @Success      200  {object}  map[string]string
+// @Router       /health [get]
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]string{"status": "ok"})
 }

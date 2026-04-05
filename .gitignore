@@ -88,6 +88,11 @@ firebase-service-account.json
 atomic-services/notifications/firebase-service-account.json
 
 # ========================
+# Go build artifacts (do not commit)
+# ========================
+*.exe
+
+# ========================
 # IDE / OS
 # ========================
 .idea/

@@ -26,6 +26,23 @@ def _sanitize_base_url(url: str) -> str:
 SANITIZED_NEW_ORDERS_URL = _sanitize_base_url(NEW_ORDERS_URL)
 
 
+def _safe_float(val) -> float | None:
+    """Parse OutSystems numeric or string coordinates."""
+    if val is None:
+        return None
+    if isinstance(val, bool):
+        return None
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip()
+    if s in {"", "null", "None"}:
+        return None
+    try:
+        return float(s)
+    except (TypeError, ValueError):
+        return None
+
+
 def _items_as_outsystems_string(items_val) -> str:
     if items_val is None:
         return ""
@@ -94,14 +111,23 @@ async def poll_and_assign():
                     _processed_order_ids.add(order_id)
                     continue
 
+                clat = _safe_float(raw.get("CLat")) or _safe_float(order.get("lat"))
+                clng = _safe_float(raw.get("CLong")) or _safe_float(order.get("lng"))
+                if clat is None or clng is None:
+                    print(
+                        f"[assign-kitchen] Order {order_id} missing CLat/CLong; "
+                        "will retry on next poll."
+                    )
+                    continue
+
                 try:
                     async with session.post(
                         f"{KITCHEN_ASSIGNMENT_URL}/assign",
                         json={
-                            "order_id": order_id,
+                            "order_id": int(order_id) if str(order_id).isdigit() else order_id,
                             "delivery_address": delivery_address,
-                            "lat": order.get("lat"),
-                            "lng": order.get("lng"),
+                            "lat": clat,
+                            "lng": clng,
                         },
                     ) as assign_resp:
                         assign_body = await assign_resp.json()

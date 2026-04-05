@@ -151,15 +151,6 @@ async def _consume_and_forward():
                         topic=topic,
                         notification=messaging.Notification(title=title, body=body),
                         data={k: str(v) for k, v in payload.items() if v is not None},
-                        webpush=messaging.WebpushConfig(
-                            notification=messaging.WebpushNotification(
-                                title=title,
-                                body=body,
-                            ),
-                            fcm_options=messaging.WebpushFCMOptions(
-                                link=f"/customer/track/{order_id}"
-                            ),
-                        ),
                     )
                     response = messaging.send(fcm_msg)
                     print(f"FCM message sent successfully: {response}")
@@ -214,9 +205,24 @@ app.add_middleware(
 )
 
 
+def _ensure_firebase_or_http_exc():
+    """Subscribe handlers used to 500 when credentials were missing (_init_firebase uncaught)."""
+    try:
+        _init_firebase()
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Firebase is not configured or failed to initialize. "
+                "Set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH "
+                f"on the notifications service. ({e})"
+            ),
+        ) from e
+
+
 @app.post("/api/notifications/subscribe")
 def subscribe(req: SubscribeRequest):
-    _init_firebase()
+    _ensure_firebase_or_http_exc()
     topic = f"{PUBLISH_TOPIC_PREFIX}{req.order_id}"
     try:
         messaging.subscribe_to_topic([req.token], topic)
@@ -227,7 +233,7 @@ def subscribe(req: SubscribeRequest):
 
 @app.post("/api/notifications/unsubscribe")
 def unsubscribe(req: UnsubscribeRequest):
-    _init_firebase()
+    _ensure_firebase_or_http_exc()
     topic = f"{PUBLISH_TOPIC_PREFIX}{req.order_id}"
     try:
         messaging.unsubscribe_from_topic([req.token], topic)
@@ -241,19 +247,12 @@ def test_send(order_id: str, message: str = "test"):
     """
     Smoke-test endpoint: sends a test payload to topic order_{order_id}.
     """
-    _init_firebase()
+    _ensure_firebase_or_http_exc()
     topic = f"{PUBLISH_TOPIC_PREFIX}{order_id}"
     fcm_msg = messaging.Message(
         topic=topic,
         notification=messaging.Notification(title="Order update", body=message),
         data={"kind": "test", "message": message, "order_id": order_id},
-        webpush=messaging.WebpushConfig(
-            notification=messaging.WebpushNotification(
-                title="Order update",
-                body=message,
-            ),
-            fcm_options=messaging.WebpushFCMOptions(link=f"/customer/track/{order_id}"),
-        ),
     )
     msg_id = messaging.send(fcm_msg)
     return {"status": "ok", "topic": topic, "message_id": msg_id}

@@ -32,8 +32,8 @@ def assign_kitchen(
     db: Client = Depends(get_db),
 ):
     """
-    Given an order_id, fetch the order's delivery_lat/lng from the orders table,
-    find the nearest available kitchen via Google Maps, and return the assignment.
+    Given order_id, delivery_address, and customer lat/lng (e.g. OutSystems CLat/CLong),
+    pick the nearest active kitchen via Google Maps and return the assignment.
     """
     response, status_code = assign_kitchen_to_order(
         db=db,

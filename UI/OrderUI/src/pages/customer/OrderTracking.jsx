@@ -1,11 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
-import { CheckCircle2, Clock, ChefHat, Truck, Loader2, Package } from "lucide-react";
+import {
+  AlertCircle,
+  Bell,
+  BellOff,
+  CheckCircle2,
+  Clock,
+  ChefHat,
+  Loader2,
+  Package,
+  Truck,
+} from "lucide-react";
 import { Navbar } from "@/components/layout/Navbar";
 import { getOrderStatus } from "@/api/orderService";
 import { getFcmRegistrationToken, onForegroundMessage } from "@/lib/firebase";
-import { subscribeToOrderTopic } from "@/api/notificationService";
+import {
+  subscribeToOrderTopic,
+  unsubscribeFromOrderTopic,
+} from "@/api/notificationService";
 
 function formatDbTimestamp(iso) {
   if (iso == null || iso === "") return null;
@@ -22,6 +35,38 @@ const STATUS_STEPS = [
   { key: "delivered", label: "Delivered", icon: Package },
 ];
 
+function fcmAlertTitle(data, payload) {
+  if (payload?.notification?.title) return payload.notification.title;
+  const s = String(data.status || "").toLowerCase();
+  const titles = {
+    confirmed: "Order confirmed",
+    pending: "Order update",
+    preparing: "Being prepared",
+    cooking: "Being prepared",
+    out_for_delivery: "Out for delivery",
+    driver_assigned: "Driver assigned",
+    delivered: "Delivered",
+    finished_cooking: "Ready for pickup",
+  };
+  return titles[s] || "Order update";
+}
+
+function fcmAlertBody(data, payload) {
+  if (payload?.notification?.body) return payload.notification.body;
+  if (data.message) return String(data.message);
+  const s = String(data.status || "").toLowerCase();
+  const bodies = {
+    confirmed: "Your order was confirmed.",
+    pending: "Your order status changed.",
+    preparing: "The kitchen is preparing your order.",
+    cooking: "The kitchen is preparing your order.",
+    out_for_delivery: "Your order is on the way.",
+    delivered: "Your order was delivered.",
+    finished_cooking: "Your order is ready for pickup.",
+  };
+  return bodies[s] || "Tap to view your order.";
+}
+
 export default function OrderTracking() {
   const params = useParams();
   const orderId = params.id;
@@ -32,6 +77,11 @@ export default function OrderTracking() {
   const [error, setError] = useState(null);
   const [notificationStatus, setNotificationStatus] = useState("checking");
   const [notificationError, setNotificationError] = useState("");
+  const [enablingPush, setEnablingPush] = useState(false);
+  const [disablingPush, setDisablingPush] = useState(false);
+  const foregroundUnsubRef = useRef(null);
+  const fcmTokenRef = useRef(null);
+  const subscribedRef = useRef(false);
 
   useEffect(() => {
     let interval;
@@ -54,7 +104,7 @@ export default function OrderTracking() {
     return () => clearInterval(interval);
   }, [orderId]);
 
-  const handleForegroundPayload = useCallback((payload) => {
+  const applyFcmDataToOrder = useCallback((payload) => {
     const data = payload?.data || {};
     if (data.order_id && String(data.order_id) !== String(orderId)) return;
     const cents =
@@ -85,6 +135,31 @@ export default function OrderTracking() {
     }));
   }, [orderId]);
 
+  const handleFcmMessage = useCallback(
+    (payload) => {
+      const data = payload?.data || {};
+      if (data.order_id && String(data.order_id) !== String(orderId)) return;
+
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        const title = fcmAlertTitle(data, payload);
+        const body = fcmAlertBody(data, payload);
+        try {
+          // Foreground: show a real system notification (same tab), tag avoids clutter
+          new Notification(title, {
+            body,
+            tag: `cloudkitchen-order-${orderId}`,
+            renotify: true,
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+
+      applyFcmDataToOrder(payload);
+    },
+    [orderId, applyFcmDataToOrder],
+  );
+
   const enableNotifications = useCallback(async (requestPermission = false) => {
     if (typeof Notification === "undefined") {
       setNotificationStatus("unsupported");
@@ -113,36 +188,91 @@ export default function OrderTracking() {
         if (Notification.permission === "granted") {
           setNotificationError("Could not get an FCM token for this browser.");
         }
+        fcmTokenRef.current = null;
+        subscribedRef.current = false;
         return () => {};
       }
 
       await subscribeToOrderTopic({ token, orderId });
-      const unsubscribe = await onForegroundMessage(handleForegroundPayload);
+      fcmTokenRef.current = token;
+      subscribedRef.current = true;
+      const unsubscribe = await onForegroundMessage(handleFcmMessage);
       setNotificationStatus("enabled");
       setNotificationError("");
       return unsubscribe;
     } catch (err) {
       setNotificationStatus("error");
       setNotificationError(err?.message || "Notification setup failed.");
+      fcmTokenRef.current = null;
+      subscribedRef.current = false;
       return () => {};
     }
-  }, [handleForegroundPayload, orderId]);
+  }, [handleFcmMessage, orderId]);
 
   useEffect(() => {
-    let unsubscribe = null;
+    let cancelled = false;
     (async () => {
-      unsubscribe = await enableNotifications(false);
+      const unsub = await enableNotifications(false);
+      if (!cancelled) foregroundUnsubRef.current = unsub;
     })();
     return () => {
-      if (typeof unsubscribe === "function") unsubscribe();
+      cancelled = true;
+      if (typeof foregroundUnsubRef.current === "function") {
+        foregroundUnsubRef.current();
+        foregroundUnsubRef.current = null;
+      }
+      // Do not call unsubscribe API on unmount — leaving the page would remove the
+      // device from topic order_<id> and test pushes / updates would stop arriving.
+      // User stays subscribed until they click "Turn off".
     };
+  }, [enableNotifications, orderId]);
+
+  const handleEnablePush = useCallback(async () => {
+    if (typeof foregroundUnsubRef.current === "function") {
+      foregroundUnsubRef.current();
+      foregroundUnsubRef.current = null;
+    }
+    setEnablingPush(true);
+    try {
+      const unsub = await enableNotifications(true);
+      foregroundUnsubRef.current = unsub;
+    } finally {
+      setEnablingPush(false);
+    }
   }, [enableNotifications]);
+
+  const handleDisablePush = useCallback(async () => {
+    const tok = fcmTokenRef.current;
+    setDisablingPush(true);
+    setNotificationError("");
+    try {
+      if (tok) {
+        await unsubscribeFromOrderTopic({ token: tok, orderId });
+      }
+    } catch (err) {
+      setNotificationError(err?.message || "Could not turn off alerts.");
+    } finally {
+      if (typeof foregroundUnsubRef.current === "function") {
+        foregroundUnsubRef.current();
+        foregroundUnsubRef.current = null;
+      }
+      fcmTokenRef.current = null;
+      subscribedRef.current = false;
+      setDisablingPush(false);
+      setNotificationStatus(
+        typeof Notification !== "undefined" && Notification.permission === "denied"
+          ? "denied"
+          : "prompt",
+      );
+    }
+  }, [orderId]);
 
   const rawStep = order ? STATUS_STEPS.findIndex((s) => s.key === order.status) : -1;
   const currentStepIndex = rawStep < 0 ? -1 : rawStep;
 
   const placedAt =
     order && !loading ? formatDbTimestamp(order.created_at) : null;
+
 
   return (
     <div className="page-customer pb-24">
@@ -166,6 +296,87 @@ export default function OrderTracking() {
             </p>
             {placedAt && (
               <p className="text-xs text-muted-foreground mt-2">Placed {placedAt}</p>
+            )}
+          </div>
+
+          {/* Alerts: compact row, no card */}
+          <div
+            className="flex flex-wrap items-center gap-x-3 gap-y-2 py-3 border-b border-border/70 text-sm"
+            role="status"
+            aria-live="polite"
+          >
+            {notificationStatus === "checking" && (
+              <>
+                <Loader2 className="w-4 h-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+                <span className="text-muted-foreground">Checking alerts…</span>
+              </>
+            )}
+            {notificationStatus === "enabled" && (
+              <>
+                <Bell className="w-4 h-4 shrink-0 text-primary" aria-hidden />
+                <span className="text-foreground flex-1 min-w-[12rem]">
+                  Alerts on — a browser notification appears when this order updates, even with this tab open.
+                </span>
+                <button
+                  type="button"
+                  disabled={disablingPush}
+                  onClick={() => void handleDisablePush()}
+                  className="shrink-0 text-xs font-medium text-muted-foreground hover:text-foreground underline underline-offset-2 disabled:opacity-50"
+                >
+                  {disablingPush ? "Turning off…" : "Turn off"}
+                </button>
+              </>
+            )}
+            {notificationStatus === "prompt" && (
+              <>
+                <Bell className="w-4 h-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="text-muted-foreground flex-1 min-w-[10rem]">
+                  Get a notification banner when status changes.
+                </span>
+                <button
+                  type="button"
+                  disabled={enablingPush}
+                  onClick={() => void handleEnablePush()}
+                  className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-95 disabled:opacity-60"
+                >
+                  {enablingPush ? "…" : "Enable"}
+                </button>
+              </>
+            )}
+            {notificationStatus === "denied" && (
+              <>
+                <BellOff className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" aria-hidden />
+                <span className="text-muted-foreground">
+                  {notificationError ||
+                    "Unblock notifications for this site in browser settings to get alerts."}
+                </span>
+              </>
+            )}
+            {notificationStatus === "unsupported" && (
+              <>
+                <BellOff className="w-4 h-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="text-muted-foreground">
+                  {notificationError || "This browser can’t use push alerts."}
+                </span>
+              </>
+            )}
+            {notificationStatus === "error" && (
+              <>
+                <AlertCircle className="w-4 h-4 shrink-0 text-destructive" aria-hidden />
+                <span className="text-destructive flex-1 min-w-[10rem]">
+                  {notificationError || "Alerts couldn’t be enabled."}
+                </span>
+                {Notification?.permission !== "denied" && (
+                  <button
+                    type="button"
+                    disabled={enablingPush}
+                    onClick={() => void handleEnablePush()}
+                    className="shrink-0 text-xs font-semibold text-destructive underline underline-offset-2 disabled:opacity-50"
+                  >
+                    {enablingPush ? "…" : "Retry"}
+                  </button>
+                )}
+              </>
             )}
           </div>
 

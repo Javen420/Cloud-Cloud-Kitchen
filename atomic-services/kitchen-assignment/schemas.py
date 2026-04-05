@@ -1,12 +1,18 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, field_validator
 
 
 class AssignKitchenRequest(BaseModel):
-    order_id: str | None = None
+    order_id: str | int | None = None
     delivery_address: str | None = None
-    lat: float | None = None
-    lng: float | None = None
+    lat: float | str | int | None = None
+    lng: float | str | int | None = None
+
+    @field_validator("order_id", mode="before")
+    @classmethod
+    def _order_id_to_str(cls, v):
+        if v is None:
+            return None
+        return str(v)
 
 
 class AddKitchenRequest(BaseModel):

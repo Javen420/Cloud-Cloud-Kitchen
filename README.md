@@ -1,163 +1,247 @@
-## Cloud Cloud Kitchen — Notes before testing
+# Cloud Cloud Kitchen
 
-This README is a quick checklist for **running the frontend** and **building/running the Docker stack** locally.
-
----
-
-## Frontend (Vite apps)
-
-### Run each UI locally
-
-```bash
-cd UI/OrderUI
-npm install
-npm run dev
-```
-
-```bash
-cd UI/KitchenUI
-npm install
-npm run dev
-```
-
-```bash
-cd UI/RiderUI
-npm install
-npm run dev
-```
-
-Open:
-- Order UI: `http://localhost:5173`
-- Kitchen UI: `http://localhost:5174`
-- Rider UI: `http://localhost:5175`
-
-### Gateway pattern (all UIs)
-
-- UI API clients use `BASE_URL = import.meta.env.VITE_API_BASE_URL || ""`.
-- Calls are made to `/api/v1/...`.
-- In local dev, Vite proxies `/api` to Kong.
-- In browser/container context, `VITE_API_BASE_URL` can be `http://localhost:8000`.
+Microservices-based food order lifecycle: order intake, payment, kitchen assignment, rider dispatch, ETA tracking, and push notifications.
 
 ---
 
-## Docker stack (Infrastructure)
+## Submission files
 
-### Run
+The following files are required to run the project but are excluded from the repository (`.gitignore`). They are included separately in the zip submission:
+
+| File | Purpose |
+|------|---------|
+| `.env` | All environment variables (Supabase, Stripe, Firebase, Google APIs, RabbitMQ, OutSystems) |
+| `firebase-service-account.json` | Firebase Admin SDK credentials for the notifications service |
+
+Place `firebase-service-account.json` at the project root before running the Docker stack.
+
+A `video.txt` file is included in the submission with the YouTube link to the demo video.
+
+---
+
+## External services
+
+The project depends on the following hosted services. Credentials are pre-configured in the provided `.env` — **no sign-up is needed**.
+
+| Service | Used for |
+|---------|---------|
+| **Supabase** | Database for kitchen, rider, and order data |
+| **Stripe** (test mode) | Payment processing |
+| **Firebase** | Push notifications (FCM) and rider authentication |
+| **Google Routes API** | ETA calculation between rider and destination |
+| **Google Maps API** | Address autocomplete and map display in Order UI |
+| **OutSystems** | External menu catalogue and orders API (Scenario 1) |
+
+> All credentials in `.env` point to live test/dev instances. Do not replace them.
+
+---
+
+## Test accounts
+
+| Role | Credential | Value |
+|------|-----------|-------|
+| Customer (Stripe) | Test card number | `4242 4242 4242 4242` (any future date, any CVC) |
+| Rider | Email / Password | `rider@test.com` / `password123` |
+
+---
+
+## Database
+
+The database is hosted on Supabase (cloud). No local database setup or SQL import is required. The Supabase project is pre-populated with kitchen data sourced from the OutSystems Menu API and rider accounts for testing.
+
+---
+
+## Tech stack
+
+- **Python** (FastAPI) — atomic and composite services
+- **Go** — ETA Calculator service
+- **React + Vite** — Order UI, Kitchen UI, Rider UI
+- **RabbitMQ** — async messaging between services
+- **Kong** — API gateway
+- **Redis** — caching (ETA, driver sessions)
+- **Supabase** — database and rider auth
+- **Stripe** — payment processing
+- **Firebase Cloud Messaging** — push notifications
+- **Docker Compose** — container orchestration
+
+---
+
+## Repo layout
+
+```
+atomic-services/       Single-responsibility microservices
+  etaCalculator/         Go service — Google Routes / haversine ETA
+  kitchen-assignment/    Kitchen assignment logic (Supabase)
+  new-orders/            OutSystems orders API proxy
+  notifications/         RabbitMQ consumer → FCM push
+  payment/               Stripe payment intents + webhooks
+  verify-address/        Google Maps address validation
+
+composite-services/    Orchestrators for multi-step flows
+  assign-driver/         Rider dispatch + payout calculation
+  etaTracking/           ETA polling + Redis caching
+  kitchen-operations/    Poll pending orders → assign kitchens
+  order-fulfilment/      Order submission + payment verification
+  order-processor/       Kitchen status updates + notifications
+
+UI/
+  OrderUI/               Customer-facing: menu, cart, checkout, tracking
+  KitchenUI/             Kitchen dashboard: order queue, status updates
+  RiderUI/               Rider app: available orders, pickup, delivery
+
+Infrastructure/
+  docker-compose.yml     All services + UIs
+  kong.yml               API gateway route config
+
+shared/                Common AMQP publisher, config helpers
+```
+
+---
+
+## How to run
+
+### Prerequisites
+
+- Docker + Docker Compose
+- Node.js + npm (only if running UIs outside Docker)
+- The `.env` and `firebase-service-account.json` files from the submission zip
+
+### 1. Start the Docker stack
 
 ```bash
 cd Infrastructure
 docker compose up -d --build
 ```
 
-Kong proxy: `http://localhost:8000`
-RabbitMQ UI: `http://localhost:15672` (default `guest/guest`)
+This starts all backend services, the three UIs, Kong, RabbitMQ, and Redis.
 
-### Active UI services in compose
+### 2. Access the UIs
 
-- `order` on `5173`
-- `kitchen` on `5174`
-- `rider` on `5175`
+| UI | URL |
+|----|-----|
+| Order UI (customer) | http://localhost:5173 |
+| Kitchen UI | http://localhost:5174 |
+| Rider UI | http://localhost:5175 |
 
-### Required env vars (root `.env`)
+### 3. Infrastructure endpoints
 
-Your containers use the repo root `.env` (referenced by `Infrastructure/docker-compose.yml` via `env_file: ../.env`).
+| Service | URL |
+|---------|-----|
+| Kong API gateway | http://localhost:8000 |
+| RabbitMQ management | http://localhost:15672 (`guest` / `guest`) |
 
-Important keys:
-
-- **Supabase**
-  - `SUPABASE_URL`
-  - `SUPABASE_KEY`
-- **Stripe**
-  - `STRIPE_SECRET_KEY`
-  - `STRIPE_WEBHOOK_SECRET`
-- **OutSystems**
-  - `OUTSYSTEMS_MENU_URL`
-  - `OUTSYSTEMS_NEWORDERS_URL` (base only, no `#...` fragment)
-- **RabbitMQ**
-  - `RABBITMQ_URL` should be `amqp://guest:guest@rabbitmq:5672/` (or match your configured user/pass)
-- **Service-to-service URLs (inside Docker)**
-  - `NEW_ORDERS_URL=${OUTSYSTEMS_NEWORDERS_URL}` for `order-fulfilment` (Scenario 1)
-  - `PAYMENT_URL=http://payment:8089`
-
-### Docker gotchas (very important)
-
-- **Never use `localhost` for service-to-service URLs inside Docker**.
-  - Inside containers, `localhost` means the container itself.
-  - Use compose DNS names like `new-orders`, `payment`, `redis`, `rabbitmq`, `kong`.
-- **Restart vs recreate**
-  - `docker compose restart` does **not** reload env vars.
-  - If you change `.env` or `docker-compose.yml`, use:
+### Run UIs locally (optional, outside Docker)
 
 ```bash
-docker compose down
-docker compose up -d --build
+cd UI/OrderUI && npm install && npm run dev
+cd UI/KitchenUI && npm install && npm run dev
+cd UI/RiderUI && npm install && npm run dev
 ```
 
-- **Port mismatches**
-  - Ensure each Dockerfile runs the port that compose maps (e.g. payment should listen on `8089`).
-- **Kong config**
-  - Kong loads `Infrastructure/kong.yml` on startup; restart Kong after changes.
-  - If routes are reaching the upstream as `POST /` unexpectedly, check `strip_path` settings in `kong.yml`.
+Set `VITE_API_BASE_URL` to `http://localhost:8000` if not using the Vite proxy.
 
 ---
 
-## Stripe Checkout redirect flow (current)
+## How services communicate
 
-Order flow is synchronous with Payment Intents:
-
-- Frontend creates/uses a payment intent via `payment` endpoints (`/api/v1/payment/*`).
-- Frontend then calls `POST /api/v1/order/submit` via Kong.
-- `order-fulfilment` verifies payment status/amount and creates the order in OutSystems Orders API (`/api/v1/orders`).
-- Order confirmation is returned directly to UI.
-
-### Scenario 1 OutSystems guardrail
-
-To avoid silent tracking failures, `order-fulfilment` now verifies OutSystems create-order response:
-- Create must return a usable, non-zero `OrderId`.
-- Service immediately verifies retrievability via `GET /api/v1/order?OrderId=...`.
-- If verification fails, submit returns failure (5xx) instead of `confirmed`.
-
-### Webhook (local dev)
-
-Use Stripe CLI to forward events to your payment service webhook endpoint.
-(Exact command depends on whether you expose the container port directly or via Kong.)
-
----
-
-## Notifications (RabbitMQ → FCM)
-
-- Producer publishes to RabbitMQ queue `notifications`.
-- `notifications` service consumes and forwards to FCM topics `order_<order_id>`.
-- Retry + DLQ queues:
-  - `notifications.retry`
-  - `notifications.dlq`
-
-### Firebase Admin credentials (required for notifications service)
-
-Set one of:
-- `FIREBASE_SERVICE_ACCOUNT_JSON` (full JSON string)
-- `FIREBASE_SERVICE_ACCOUNT_PATH` (path inside container)
-
-If Firebase creds are missing, the consumer won’t start and RabbitMQ queues may not be created.
+- Client UIs call Kong at `/api/v1/...`
+- Kong routes requests to individual service containers by path
+- Async events use RabbitMQ:
+  - `order_events` topic exchange for notifications, ETA updates
+  - `notifications` queue with retry + DLQ for failed FCM deliveries
+- Service-to-service calls use HTTP within the Docker network (service hostnames, not `localhost`)
 
 ---
 
 ## Route map (Kong)
 
-Scenario 1 (Order):
-- `POST /api/v1/order/submit` -> `order-fulfilment:8081`
-- `GET /api/v1/order/{order_id}` -> `order-fulfilment:8081`
-- `POST|GET /api/v1/payment/*` -> `payment:8089`
-- `GET /api/v1/menu` -> OutSystems Menu API
-  - internally uses OutSystems Orders API:
-    - `POST /api/v1/orders`
-    - `GET /api/v1/order?OrderId=...`
+### Scenario 1 — Order
 
-Scenario 2 (Kitchen):
-- `GET|PUT /api/v1/kitchen/*` -> `coordinate-fulfilment:8094`
-- `GET /api/v1/kitchen-assign/health` -> `assign-kitchen:8093`
+| Method | Path | Service |
+|--------|------|---------|
+| POST | `/api/v1/order/submit` | order-fulfilment:8081 |
+| GET | `/api/v1/order/{id}` | order-fulfilment:8081 |
+| POST/GET | `/api/v1/payment/*` | payment:8089 |
+| GET | `/api/v1/menu` | OutSystems Menu API |
 
-Scenario 3 (Rider):
-- `GET|PUT /api/v1/driver/assign` -> `assign-driver:8086`
-- `GET /api/v1/driver/orders` -> `assign-driver:8086`
-- `GET|POST /api/v1/eta/*` -> `eta-tracking:8087`
+### Scenario 2 — Kitchen
+
+| Method | Path | Service |
+|--------|------|---------|
+| GET/PUT | `/api/v1/kitchen/*` | order-processor:8094 |
+| GET | `/api/v1/kitchen-assign/health` | kitchen-operations:8093 |
+
+### Scenario 3 — Rider
+
+| Method | Path | Service |
+|--------|------|---------|
+| GET/PUT | `/api/v1/driver/*` | assign-driver:8086 |
+| GET/POST | `/api/v1/eta/*` | eta-tracking:8087 |
+
+### Notifications
+
+| Method | Path | Service |
+|--------|------|---------|
+| POST | `/api/notifications/subscribe` | notifications:8090 |
+| POST | `/api/notifications/unsubscribe` | notifications:8090 |
+
+---
+
+## Order flow (Scenario 1)
+
+1. Customer browses menu (fetched from OutSystems via Kong)
+2. Customer adds items to cart, enters delivery address (Google Maps autocomplete)
+3. Checkout creates a Stripe Payment Intent
+4. On successful payment, `order-fulfilment` creates the order in OutSystems and verifies it
+5. Confirmation returned to customer; push notification sent via RabbitMQ → FCM
+
+## Kitchen flow (Scenario 2)
+
+1. `kitchen-operations` polls OutSystems for pending orders
+2. Assigns the nearest kitchen via `kitchen-assignment` (Supabase, haversine)
+3. Updates OutSystems with kitchen assignment
+4. Kitchen UI shows assigned orders; kitchen staff updates status (cooking → finished)
+5. On `finished_cooking`, notification sent to customer
+
+## Rider flow (Scenario 3)
+
+1. Rider logs in via Supabase Auth (Firebase for push tokens)
+2. `assign-driver` shows available `finished_cooking` orders sorted by distance
+3. Rider accepts → dropoff cached in Redis, ETA calculated (Google Routes API with haversine fallback)
+4. Rider picks up → marks `out_for_delivery`
+5. Rider delivers → marks `delivered`
+6. Push notifications sent at each stage
+
+---
+
+## Notifications flow
+
+- Services publish events to `order_events` RabbitMQ exchange (or directly to `notifications` queue)
+- `notifications` service consumes from the queue and sends FCM messages to topic `order_<order_id>`
+- Customer's browser subscribes to the FCM topic on the tracking page
+- Retry queue (`notifications.retry`) and dead-letter queue (`notifications.dlq`) handle failures
+
+---
+
+## Docker gotchas
+
+- **Never use `localhost` for service-to-service URLs inside Docker** — use compose service names (`payment`, `rabbitmq`, `redis`, `kong`, etc.)
+- **`docker compose restart` does NOT reload env vars** — after changing `.env` or `docker-compose.yml`:
+  ```bash
+  docker compose down
+  docker compose up -d --build
+  ```
+- **Kong config** — Kong loads `kong.yml` on startup; restart Kong after changes
+- **Firebase credentials** — set `FIREBASE_SERVICE_ACCOUNT_JSON` in `.env` (single-line JSON); alternatively use `FIREBASE_SERVICE_ACCOUNT_PATH` with a volume mount
+
+---
+
+## Stripe (local dev)
+
+Use the Stripe CLI to forward webhook events to the payment service:
+
+```bash
+stripe listen --forward-to localhost:8089/api/v1/payment/webhook
+```
+
+Test card: `4242 4242 4242 4242`, any future expiry, any CVC.
